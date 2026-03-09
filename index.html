@@ -1717,19 +1717,23 @@ drawTitle=function(){
   }
 };
 
-// Auto-fullscreen on landscape
+// Auto-fullscreen on landscape + first touch
 if(isTouchDevice){
   function tryFS(){
-    if(!document.fullscreenElement&&screen.orientation&&screen.orientation.type.includes('landscape')){
+    if(!document.fullscreenElement){
       const el=document.documentElement;
       if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
       else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
     }
   }
+  // Fullscreen on first touch (user gesture required by browsers)
+  let fsDone=false;
+  document.addEventListener('touchstart',function fsTouch(){
+    if(!fsDone){tryFS();fsDone=true;}
+  },{once:false,passive:true});
+  // Also try on orientation change (direct, no setTimeout to keep user gesture context)
   if(screen.orientation)screen.orientation.addEventListener('change',tryFS);
-  window.addEventListener('orientationchange',()=>setTimeout(tryFS,300));
-  // Try on load if already landscape
-  setTimeout(tryFS,500);
+  window.addEventListener('orientationchange',tryFS);
 }
 // Fullscreen button removed — auto-fullscreen on landscape + TAP TO START handles it
 loop();
