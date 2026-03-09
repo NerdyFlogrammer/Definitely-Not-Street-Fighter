@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Definitely Not Street Fighter</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; cursor: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+// ============================================================
+// DEFINITELY NOT STREET FIGHTER
+// A retro SNES-style 2D fighting game
+// ============================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 512, H = 384;
+canvas.width = W; canvas.height = H;
+
+// Scale canvas to fit window
+function resize() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width = (W * s) + 'px';
+  canvas.style.height = (H * s) + 'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================
+// AUDIO ENGINE (Web Audio API chiptune)
+// ============================================================
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+// Play a tone
+function playTone(freq, duration, type = 'square', vol = 0.15, detune = 0) {
+  ensureAudio();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  o.detune.value = detune;
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + duration);
+}
+
+// Noise burst for hits
+function playNoise(duration, vol = 0.2) {
+  ensureAudio();
+  const bufSize = audioCtx.sampleRate * duration;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = audioCtx.createBufferSource();
+  const g = audioCtx.createGain();
+  src.buffer = buf;
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  src.connect(g); g.connect(audioCtx.destination);
+  src.start();
+}
+
+// Sound effects
+const SFX = {
+  punch() { playTone(200, 0.08, 'square', 0.3); playNoise(0.1, 0.25); },
+  kick() { playTone(120, 0.12, 'square', 0.3); playNoise(0.15, 0.3); },
+  block() { playTone(800, 0.05, 'triangle', 0.2); playTone(600, 0.05, 'triangle', 0.15); },
+  special() {
+    playTone(400, 0.1, 'sawtooth', 0.2);
+    setTimeout(() => playTone(600, 0.1, 'sawtooth', 0.2), 50);
+    setTimeout(() => playTone(800, 0.15, 'sawtooth', 0.25), 100);
+  },
+  ko() {
+    [523, 659, 784, 1047].forEach((f, i) => {
+      setTimeout(() => playTone(f, 0.3, 'square', 0.2), i * 150);
+    });
+    setTimeout(() => playNoise(0.5, 0.15), 0);
+  },
+  select() { playTone(440, 0.1, 'square', 0.15); playTone(880, 0.15, 'square', 0.15); },
+  menuMove() { playTone(330, 0.05, 'square', 0.1); },
+  roundAnnounce() {
+    [300, 400, 500, 600, 500, 400].forEach((f, i) => {
+      setTimeout(() => playTone(f, 0.12, 'sawtooth', 0.2), i * 80);
+    });
+  },
+  fight() {
+    playTone(200, 0.15, 'sawtooth', 0.3);
+    setTimeout(() => playTone(400, 0.2, 'sawtooth', 0.35), 100);
+    setTimeout(() => playNoise(0.2, 0.2), 150);
+  },
+  win() {
+    const melody = [523, 659, 784, 1047, 784, 1047, 1318];
+    melody.forEach((f, i) => setTimeout(() => playTone(f, 0.25, 'square', 0.2), i * 180));
+  }
+};
+
+// Music system
+let musicInterval = null;
+let musicPlaying = false;
+
+function stopMusic() {
+  if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+  musicPlaying = false;
+}
+
+function playMenuMusic() {
+  stopMusic();
+  musicPlaying = true;
+  const melody = [262, 330, 392, 330, 262, 220, 262, 330, 392, 523, 440, 392, 330, 262, 220, 196];
+  let i = 0;
+  const play = () => {
+    if (!musicPlaying) return;
+    playTone(melody[i % melody.length], 0.2, 'square', 0.08);
+    playTone(melody[i % melody.length] / 2, 0.2, 'triangle', 0.05);
+    i++;
+  };
+  play();
+  musicInterval = setInterval(play, 280);
+}
+
+function playFightMusic() {
+  stopMusic();
+  musicPlaying = true;
+  const bass = [130, 130, 165, 165, 196, 196, 165, 165, 130, 130, 110, 110, 130, 130, 165, 196];
+  const lead = [523, 494, 440, 392, 440, 494, 523, 587, 523, 494, 440, 392, 330, 392, 440, 523];
+  let i = 0;
+  const play = () => {
+    if (!musicPlaying) return;
+    playTone(bass[i % bass.length], 0.15, 'triangle', 0.06);
+    if (i % 2 === 0) playTone(lead[Math.floor(i/2) % lead.length], 0.12, 'square', 0.05);
+    i++;
+  };
+  play();
+  musicInterval = setInterval(play, 200);
+}
+
+// ============================================================
+// PIXEL ART SPRITE SYSTEM
+// ============================================================
+
+// Create an offscreen canvas for drawing sprites
+function createSprite(w, h, drawFn) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  drawFn(cx, w, h);
+  return c;
+}
+
+// Draw a pixel at scaled size
+function px(cx, x, y, color, size = 1) {
+  cx.fillStyle = color;
+  cx.fillRect(x, y, size, size);
+}
+
+// Draw a rect of pixels
+function pxRect(cx, x, y, w, h, color) {
+  cx.fillStyle = color;
+  cx.fillRect(x, y, w, h);
+}
+
+// ============================================================
+// CHARACTER DEFINITIONS
+// ============================================================
+
+const CHARACTERS = [
+  {
+    id: 'ninja',
+    name: 'SHADOW KAZE',
+    subtitle: 'The Silent Storm',
+    colors: { body: '#2a2a5e', accent: '#8844cc', skin: '#e8c090', hair: '#222', eyes: '#ff4444', belt: '#cc2222' },
+    speed: 4,
+    specialName: 'PHANTOM SLASH',
+    specialDamage: 18,
+    punchDamage: 8,
+    kickDamage: 10,
+    quotes: [
+      '"You didn\'t see me coming... literally."',
+      '"The shadows have judged you... UNWORTHY!"',
+      '"Omae wa mou... wait, wrong anime."'
+    ]
+  },
+  {
+    id: 'brawler',
+    name: 'BRICK THUNDER',
+    subtitle: 'The Human Tank',
+    colors: { body: '#cc4400', accent: '#ffaa00', skin: '#d4a574', hair: '#553300', eyes: '#fff', belt: '#222' },
+    speed: 2.5,
+    specialName: 'MEGA SLAM',
+    specialDamage: 22,
+    punchDamage: 10,
+    kickDamage: 9,
+    quotes: [
+      '"I didn\'t skip leg day. Or ANY day."',
+      '"That\'s gonna leave a BRICK-shaped mark!"',
+      '"THUNDER... THUNDER... THUNDERPUNCH!"'
+    ]
+  },
+  {
+    id: 'monk',
+    name: 'MASTER ZENITH',
+    subtitle: 'Fist of Tranquility',
+    colors: { body: '#dd8800', accent: '#ffcc44', skin: '#f0d0a0', hair: '#aaa', eyes: '#44aaff', belt: '#aa6600' },
+    speed: 3,
+    specialName: 'CHI BLAST',
+    specialDamage: 16,
+    punchDamage: 7,
+    kickDamage: 11,
+    quotes: [
+      '"Inner peace... OUTER DESTRUCTION!"',
+      '"I meditated for 40 years for THIS."',
+      '"The path to enlightenment goes through YOUR FACE."'
+    ]
+  },
+  {
+    id: 'hacker',
+    name: 'GLITCH_404',
+    subtitle: 'System Override',
+    colors: { body: '#1a1a2e', accent: '#00ff88', skin: '#c8b8a8', hair: '#00ffcc', eyes: '#ff00ff', belt: '#004422' },
+    speed: 3.5,
+    specialName: 'BUFFER OVERFLOW',
+    specialDamage: 17,
+    punchDamage: 8,
+    kickDamage: 9,
+    quotes: [
+      '"git push --force YOUR_FACE"',
+      '"404: Your skills not found."',
+      '"I hacked the mainframe... of PAIN!"'
+    ]
+  }
+];
+
+// ============================================================
+// SPRITE DRAWING FUNCTIONS
+// ============================================================
+
+function drawCharSprite(charDef, pose, frame, facing) {
+  const S = 64;
+  return createSprite(S, S, (cx) => {
+    const c = charDef.colors;
+    const f = facing === 'right' ? 1 : -1;
+    const bob = Math.sin(frame * 0.15) * 2;
+
+    if (facing === 'left') {
+      cx.translate(S, 0);
+      cx.scale(-1, 1);
+    }
+
+    // Common body parts helper
+    const drawBody = (headY, bodyY, legSpread, armPose) => {
+      // Legs
+      pxRect(cx, 22, bodyY + 16, 6, 14, c.body);
+      pxRect(cx, 36, bodyY + 16, 6, 14, c.body);
+      // Shoes
+      pxRect(cx, 20, bodyY + 28, 8, 4, '#333');
+      pxRect(cx, 34, bodyY + 28, 8, 4, '#333');
+      // Body/torso
+      pxRect(cx, 20, bodyY, 24, 18, c.body);
+      // Belt
+      pxRect(cx, 20, bodyY + 14, 24, 3, c.belt);
+      // Accent stripe
+      pxRect(cx, 20, bodyY + 4, 24, 2, c.accent);
+      // Head
+      pxRect(cx, 24, headY, 16, 16, c.skin);
+      // Hair
+      pxRect(cx, 23, headY - 2, 18, 6, c.hair);
+      // Eyes
+      pxRect(cx, 28, headY + 6, 3, 3, '#fff');
+      pxRect(cx, 35, headY + 6, 3, 3, '#fff');
+      pxRect(cx, 29, headY + 7, 2, 2, c.eyes);
+      pxRect(cx, 36, headY + 7, 2, 2, c.eyes);
+    };
+
+    switch(pose) {
+      case 'idle': {
+        const b = Math.floor(bob);
+        drawBody(12 + b, 28 + b, 0);
+        // Arms at sides
+        pxRect(cx, 14, 30 + b, 6, 12, c.skin);
+        pxRect(cx, 44, 30 + b, 6, 12, c.skin);
+        // Fists
+        pxRect(cx, 14, 40 + b, 6, 4, c.skin);
+        pxRect(cx, 44, 40 + b, 6, 4, c.skin);
+        break;
+      }
+      case 'walk': {
+        const step = Math.sin(frame * 0.3) * 4;
+        drawBody(12, 28, 0);
+        // Animated legs
+        pxRect(cx, 22, 44 + step, 6, 14, c.body);
+        pxRect(cx, 36, 44 - step, 6, 14, c.body);
+        pxRect(cx, 20, 56 + step, 8, 4, '#333');
+        pxRect(cx, 34, 56 - step, 8, 4, '#333');
+        // Arms swinging
+        pxRect(cx, 14, 30 - step, 6, 12, c.skin);
+        pxRect(cx, 44, 30 + step, 6, 12, c.skin);
+        break;
+      }
+      case 'punch': {
+        drawBody(12, 28, 0);
+        // Punching arm extended
+        pxRect(cx, 44, 30, 18, 6, c.skin);
+        pxRect(cx, 58, 28, 6, 8, c.skin);
+        // Impact flash
+        if (frame % 4 < 2) {
+          pxRect(cx, 60, 26, 4, 4, '#ff0');
+          pxRect(cx, 58, 24, 3, 3, '#f80');
+        }
+        // Other arm
+        pxRect(cx, 14, 32, 6, 10, c.skin);
+        break;
+      }
+      case 'kick': {
+        drawBody(10, 26, 0);
+        // Kicking leg extended
+        pxRect(cx, 44, 44, 16, 6, c.body);
+        pxRect(cx, 56, 42, 8, 8, '#333');
+        // Impact
+        if (frame % 4 < 2) {
+          pxRect(cx, 60, 40, 4, 4, '#ff0');
+        }
+        // Arms in guard
+        pxRect(cx, 16, 28, 6, 10, c.skin);
+        pxRect(cx, 42, 28, 6, 10, c.skin);
+        break;
+      }
+      case 'special': {
+        drawBody(10, 26, 0);
+        // Arms forward channeling
+        pxRect(cx, 44, 28, 12, 6, c.skin);
+        pxRect(cx, 14, 28, 6, 10, c.skin);
+        // Energy ball
+        const r = 6 + Math.sin(frame * 0.5) * 2;
+        cx.fillStyle = c.accent;
+        cx.beginPath();
+        cx.arc(62, 32, r, 0, Math.PI * 2);
+        cx.fill();
+        cx.fillStyle = '#fff';
+        cx.beginPath();
+        cx.arc(62, 32, r * 0.5, 0, Math.PI * 2);
+        cx.fill();
+        // Sparkles
+        if (frame % 3 === 0) {
+          pxRect(cx, 56 + Math.random()*12, 26 + Math.random()*12, 2, 2, '#fff');
+        }
+        break;
+      }
+      case 'block': {
+        drawBody(14, 30, 0);
+        // Arms crossed in front
+        pxRect(cx, 26, 30, 6, 14, c.skin);
+        pxRect(cx, 32, 30, 6, 14, c.skin);
+        // Shield shimmer
+        if (frame % 6 < 3) {
+          cx.globalAlpha = 0.3;
+          pxRect(cx, 22, 28, 20, 18, '#88ccff');
+          cx.globalAlpha = 1;
+        }
+        break;
+      }
+      case 'hit': {
+        // Leaning back
+        drawBody(14, 30, 0);
+        pxRect(cx, 10, 32, 6, 10, c.skin);
+        pxRect(cx, 44, 34, 6, 10, c.skin);
+        // Pain stars
+        pxRect(cx, 30, 10, 3, 3, '#ff0');
+        pxRect(cx, 38, 8, 2, 2, '#f80');
+        pxRect(cx, 24, 12, 2, 2, '#ff0');
+        break;
+      }
+      case 'ko': {
+        // Lying on ground
+        pxRect(cx, 8, 48, 16, 12, c.skin); // head
+        pxRect(cx, 6, 46, 18, 5, c.hair);
+        // X eyes
+        pxRect(cx, 12, 52, 2, 2, '#f00');
+        pxRect(cx, 14, 54, 2, 2, '#f00');
+        pxRect(cx, 14, 52, 2, 2, '#f00');
+        pxRect(cx, 12, 54, 2, 2, '#f00');
+        pxRect(cx, 19, 52, 2, 2, '#f00');
+        pxRect(cx, 21, 54, 2, 2, '#f00');
+        pxRect(cx, 21, 52, 2, 2, '#f00');
+        pxRect(cx, 19, 54, 2, 2, '#f00');
+        // Body flat
+        pxRect(cx, 22, 46, 28, 12, c.body);
+        pxRect(cx, 22, 54, 28, 3, c.belt);
+        // Legs
+        pxRect(cx, 48, 46, 14, 8, c.body);
+        pxRect(cx, 58, 46, 4, 8, '#333');
+        // Stars circling
+        const starAngle = frame * 0.1;
+        for (let s = 0; s < 3; s++) {
+          const sx = 16 + Math.cos(starAngle + s * 2.1) * 12;
+          const sy = 42 + Math.sin(starAngle + s * 2.1) * 5;
+          pxRect(cx, sx, sy, 3, 3, '#ff0');
+        }
+        break;
+      }
+    }
+
+    // Character-specific details
+    if (charDef.id === 'ninja' && pose !== 'ko') {
+      // Mask
+      pxRect(cx, 24, 38 + (pose==='idle'?Math.floor(bob):0) + (pose==='hit'?2:0) + 6, 16, 4, '#333');
+      // Headband tails
+      pxRect(cx, 18, 12 + (pose==='idle'?Math.floor(bob):0), 6, 2, '#cc2222');
+    }
+    if (charDef.id === 'brawler' && pose !== 'ko') {
+      // Thick arms (draw over)
+      const by = pose==='idle'?Math.floor(bob):0;
+      if (pose === 'idle' || pose === 'walk') {
+        pxRect(cx, 12, 30+by, 8, 14, c.skin);
+        pxRect(cx, 44, 30+by, 8, 14, c.skin);
+      }
+      // Championship belt sparkle
+      if (frame % 10 < 3) {
+        pxRect(cx, 30, (pose==='idle'?42+Math.floor(bob):42), 4, 2, '#ff0');
+      }
+    }
+    if (charDef.id === 'monk' && pose !== 'ko') {
+      // Bald head (no hair redraw needed, hair color is light)
+      // Prayer beads
+      const by = pose==='idle'?Math.floor(bob):0;
+      for (let b = 0; b < 5; b++) {
+        pxRect(cx, 22 + b*4, 28+by, 2, 2, '#884400');
+      }
+    }
+    if (charDef.id === 'hacker' && pose !== 'ko') {
+      // Visor/goggles
+      const by = pose==='idle'?Math.floor(bob):0;
+      pxRect(cx, 26, 18+by, 14, 3, '#00ff88');
+      // Digital particles
+      if (frame % 4 === 0 && (pose === 'special' || pose === 'idle')) {
+        pxRect(cx, 20+Math.random()*24, 26+by+Math.random()*20, 2, 2, '#00ff88');
+      }
+    }
+  });
+}
+
+// ============================================================
+// BACKGROUND STAGES
+// ============================================================
+
+const STAGES = [
+  {
+    name: 'ANCIENT DOJO',
+    draw(cx, w, h, frame) {
+      // Sky gradient
+      for (let y = 0; y < h * 0.4; y++) {
+        const t = y / (h * 0.4);
+        const r = Math.floor(40 + t * 60);
+        const g = Math.floor(20 + t * 40);
+        const b = Math.floor(80 + t * 40);
+        pxRect(cx, 0, y, w, 1, `rgb(${r},${g},${b})`);
+      }
+      // Mountains
+      cx.fillStyle = '#2a1a3a';
+      cx.beginPath();
+      cx.moveTo(0, h*0.4); cx.lineTo(80, h*0.2); cx.lineTo(160, h*0.35);
+      cx.lineTo(250, h*0.15); cx.lineTo(340, h*0.3); cx.lineTo(420, h*0.18);
+      cx.lineTo(w, h*0.35); cx.lineTo(w, h*0.4); cx.closePath(); cx.fill();
+      // Dojo building
+      pxRect(cx, 100, h*0.25, 312, h*0.55, '#5a3a1a');
+      pxRect(cx, 90, h*0.22, 332, 12, '#8b4513');
+      // Roof
+      cx.fillStyle = '#3a1a0a';
+      cx.beginPath();
+      cx.moveTo(80, h*0.22); cx.lineTo(256, h*0.1); cx.lineTo(432, h*0.22); cx.closePath(); cx.fill();
+      // Pillars
+      for (let i = 0; i < 4; i++) {
+        pxRect(cx, 120 + i * 90, h*0.25, 16, h*0.55, '#8b4513');
+      }
+      // Floor
+      pxRect(cx, 0, h*0.75, w, h*0.25, '#4a2a0a');
+      // Floor lines
+      for (let i = 0; i < 8; i++) {
+        pxRect(cx, i * 66, h*0.75, 1, h*0.25, '#3a1a00');
+      }
+      // Lanterns
+      for (let i = 0; i < 3; i++) {
+        const lx = 150 + i * 100;
+        pxRect(cx, lx, h*0.28, 12, 16, '#ff4400');
+        if (frame % 8 < 4) pxRect(cx, lx+2, h*0.28+2, 8, 8, '#ffaa00');
+      }
+      // Japanese banner
+      pxRect(cx, 250, h*0.25, 20, 60, '#cc0000');
+      cx.fillStyle = '#fff';
+      cx.font = '8px monospace';
+      cx.fillText('武', 253, h*0.25 + 25);
+      cx.fillText('道', 253, h*0.25 + 45);
+    }
+  },
+  {
+    name: 'NEON STREET',
+    draw(cx, w, h, frame) {
+      // Night sky
+      pxRect(cx, 0, 0, w, h, '#0a0a1a');
+      // Stars
+      for (let i = 0; i < 20; i++) {
+        const sx = (i * 47 + 13) % w;
+        const sy = (i * 31 + 7) % (h * 0.3);
+        if ((frame + i) % 12 < 8) pxRect(cx, sx, sy, 2, 2, '#ffffff');
+      }
+      // Buildings background
+      const buildings = [[0,120,80],[70,100,70],[130,140,90],[210,90,65],[270,130,85],[345,110,75],[410,145,w-410]];
+      buildings.forEach(([x, bh, bw]) => {
+        pxRect(cx, x, h*0.75 - bh, bw, bh, '#1a1a2e');
+        // Windows
+        for (let wy = 0; wy < bh - 15; wy += 15) {
+          for (let wx = 5; wx < bw - 5; wx += 12) {
+            const lit = ((x + wx + wy + frame) * 7) % 11 < 6;
+            pxRect(cx, x + wx, h*0.75 - bh + wy + 5, 6, 8, lit ? '#ffdd44' : '#0a0a1e');
+          }
+        }
+      });
+      // Neon signs
+      if (frame % 20 < 15) {
+        pxRect(cx, 150, h*0.35, 60, 12, '#ff0066');
+        cx.fillStyle = '#fff';
+        cx.font = '9px monospace';
+        cx.fillText('FIGHT!', 154, h*0.35 + 10);
+      }
+      if (frame % 16 < 12) {
+        pxRect(cx, 320, h*0.32, 50, 12, '#00ffcc');
+        cx.fillStyle = '#fff';
+        cx.font = '8px monospace';
+        cx.fillText('OPEN', 326, h*0.32 + 10);
+      }
+      // Street
+      pxRect(cx, 0, h*0.75, w, h*0.25, '#2a2a3a');
+      // Street markings
+      for (let i = 0; i < 8; i++) {
+        pxRect(cx, i * 80 + (frame % 80), h*0.85, 40, 3, '#ffff44');
+      }
+      // Streetlights
+      for (let i = 0; i < 3; i++) {
+        const lx = 60 + i * 200;
+        pxRect(cx, lx, h*0.45, 4, h*0.3, '#555');
+        pxRect(cx, lx - 6, h*0.45, 16, 8, '#666');
+        pxRect(cx, lx - 2, h*0.44, 8, 4, '#ffdd88');
+        // Light cone
+        cx.globalAlpha = 0.1;
+        cx.fillStyle = '#ffdd88';
+        cx.beginPath();
+        cx.moveTo(lx - 4, h*0.48); cx.lineTo(lx + 8, h*0.48);
+        cx.lineTo(lx + 20, h*0.75); cx.lineTo(lx - 16, h*0.75); cx.closePath(); cx.fill();
+        cx.globalAlpha = 1;
+      }
+    }
+  },
+  {
+    name: 'SUNSET HARBOR',
+    draw(cx, w, h, frame) {
+      // Sunset sky
+      for (let y = 0; y < h * 0.5; y++) {
+        const t = y / (h * 0.5);
+        const r = Math.floor(255 - t * 100);
+        const g = Math.floor(120 - t * 80);
+        const b = Math.floor(50 + t * 100);
+        pxRect(cx, 0, y, w, 1, `rgb(${r},${g},${b})`);
+      }
+      // Sun
+      cx.fillStyle = '#ffcc00';
+      cx.beginPath(); cx.arc(380, h*0.2, 30, 0, Math.PI*2); cx.fill();
+      cx.fillStyle = '#ffee66';
+      cx.beginPath(); cx.arc(380, h*0.2, 22, 0, Math.PI*2); cx.fill();
+      // Water
+      for (let y = Math.floor(h*0.5); y < Math.floor(h*0.75); y++) {
+        const t = (y - h*0.5) / (h*0.25);
+        pxRect(cx, 0, y, w, 1, `rgb(${Math.floor(20+t*20)},${Math.floor(60+t*30)},${Math.floor(120+t*40)})`);
+        // Water shimmer
+        if ((y + frame) % 6 < 2) {
+          pxRect(cx, (y * 37 + frame * 2) % w, y, 20, 1, 'rgba(255,200,100,0.3)');
+        }
+      }
+      // Ships
+      pxRect(cx, 80 + Math.sin(frame*0.02)*10, h*0.45, 40, 15, '#4a3020');
+      pxRect(cx, 95 + Math.sin(frame*0.02)*10, h*0.3, 3, h*0.15, '#5a4030');
+      pxRect(cx, 300 + Math.sin(frame*0.015)*8, h*0.42, 30, 12, '#5a4030');
+      // Dock/pier
+      pxRect(cx, 0, h*0.72, w, 6, '#6a4a2a');
+      for (let i = 0; i < 10; i++) {
+        pxRect(cx, i * 55 + 10, h*0.72, 6, h*0.28, '#5a3a1a');
+      }
+      // Ground
+      pxRect(cx, 0, h*0.75, w, h*0.25, '#8a7a6a');
+      // Crates
+      pxRect(cx, 20, h*0.75-20, 24, 20, '#8b6914');
+      pxRect(cx, 50, h*0.75-16, 20, 16, '#9b7924');
+      pxRect(cx, 440, h*0.75-18, 22, 18, '#8b6914');
+      // Seagulls
+      for (let i = 0; i < 3; i++) {
+        const bx = (i * 170 + frame * 0.5) % (w + 40) - 20;
+        const by = h*0.15 + Math.sin(frame*0.03+i)*10;
+        cx.strokeStyle = '#fff';
+        cx.lineWidth = 1;
+        cx.beginPath(); cx.moveTo(bx-4,by); cx.lineTo(bx,by-3); cx.lineTo(bx+4,by); cx.stroke();
+      }
+    }
+  },
+  {
+    name: 'MYSTIC TEMPLE',
+    draw(cx, w, h, frame) {
+      // Mystical gradient sky
+      for (let y = 0; y < h * 0.5; y++) {
+        const t = y / (h * 0.5);
+        const r = Math.floor(20 + t * 30);
+        const g = Math.floor(10 + t * 30);
+        const b = Math.floor(50 + t * 60);
+        pxRect(cx, 0, y, w, 1, `rgb(${r},${g},${b})`);
+      }
+      // Moon
+      cx.fillStyle = '#ddeeff';
+      cx.beginPath(); cx.arc(100, 50, 24, 0, Math.PI*2); cx.fill();
+      cx.fillStyle = '#0a0a2a';
+      cx.beginPath(); cx.arc(108, 46, 22, 0, Math.PI*2); cx.fill();
+      // Temple structure
+      pxRect(cx, 130, h*0.2, 252, h*0.6, '#3a2a4a');
+      // Temple roof tiers
+      for (let t = 0; t < 3; t++) {
+        const tw = 280 - t * 40;
+        const tx = 116 + t * 20;
+        const ty = h*0.2 - t * 30;
+        cx.fillStyle = '#2a1a3a';
+        cx.beginPath();
+        cx.moveTo(tx, ty + 30); cx.lineTo(tx + tw/2, ty); cx.lineTo(tx + tw, ty + 30);
+        cx.closePath(); cx.fill();
+        // Roof edge
+        pxRect(cx, tx, ty + 28, tw, 3, '#5a3a6a');
+      }
+      // Temple door
+      pxRect(cx, 226, h*0.5, 60, h*0.3, '#1a0a2a');
+      pxRect(cx, 224, h*0.48, 64, 4, '#aa8800');
+      // Pillars
+      for (let i = 0; i < 2; i++) {
+        pxRect(cx, 150 + i * 200, h*0.2, 14, h*0.6, '#5a3a6a');
+      }
+      // Floating particles/fireflies
+      for (let i = 0; i < 15; i++) {
+        const px2 = (i * 67 + Math.sin(frame * 0.02 + i) * 30 + frame * 0.3) % w;
+        const py = (i * 43 + Math.cos(frame * 0.015 + i) * 20) % (h * 0.7);
+        const alpha = 0.3 + Math.sin(frame * 0.05 + i) * 0.3;
+        cx.globalAlpha = alpha;
+        pxRect(cx, px2, py, 2, 2, i % 3 === 0 ? '#ff88ff' : '#88ffff');
+      }
+      cx.globalAlpha = 1;
+      // Ground
+      pxRect(cx, 0, h*0.75, w, h*0.25, '#2a1a1a');
+      // Stone path
+      for (let i = 0; i < 12; i++) {
+        pxRect(cx, i * 44 + 5, h*0.78, 36, 8, '#3a2a2a');
+        pxRect(cx, i * 44 + 5, h*0.78, 36, 1, '#4a3a3a');
+      }
+      // Incense smoke
+      for (let i = 0; i < 3; i++) {
+        const sx = 210 + i * 50;
+        for (let s = 0; s < 4; s++) {
+          const sy = h*0.5 - s * 12 - (frame * 0.5 % 20);
+          cx.globalAlpha = 0.2 - s * 0.04;
+          pxRect(cx, sx + Math.sin(frame*0.03+s)*4, sy, 4, 4, '#aaa');
+        }
+      }
+      cx.globalAlpha = 1;
+    }
+  }
+];
+
+// ============================================================
+// GAME STATE
+// ============================================================
+
+let gameState = 'title'; // title, charSelect, fight, roundEnd, matchEnd
+let selectedStage = 0;
+let frameCount = 0;
+let screenShake = 0;
+let flashTimer = 0;
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); ensureAudio(); });
+window.addEventListener('keyup', e => { keys[e.code] = false; e.preventDefault(); });
+
+// Players
+const players = [
+  { charIdx: 0, confirmed: false, x: 120, y: 0, hp: 100, maxHp: 100, facing: 'right', state: 'idle', stateTimer: 0, wins: 0, velocity: 0, cooldown: 0, hitstun: 0, blockstun: 0, specialCooldown: 0 },
+  { charIdx: 1, confirmed: false, x: 340, y: 0, hp: 100, maxHp: 100, facing: 'left', state: 'idle', stateTimer: 0, wins: 0, velocity: 0, cooldown: 0, hitstun: 0, blockstun: 0, specialCooldown: 0 }
+];
+
+let roundNum = 1;
+let roundTimer = 99;
+let roundTimerTick = 0;
+let roundState = 'announce'; // announce, fight, ko
+let roundAnnounceTimer = 0;
+let winner = -1;
+let matchWinner = -1;
+let titleBlink = 0;
+let titleSelected = 0; // 0=fight, 1=???
+
+// Projectiles
+let projectiles = [];
+
+// Particles
+let particles = [];
+
+function addParticle(x, y, color, life = 20) {
+  particles.push({
+    x, y,
+    vx: (Math.random() - 0.5) * 4,
+    vy: -Math.random() * 3 - 1,
+    color,
+    life,
+    maxLife: life
+  });
+}
+
+// ============================================================
+// TITLE SCREEN
+// ============================================================
+
+function updateTitle() {
+  titleBlink++;
+  if (keys['Enter'] || keys['Space']) {
+    gameState = 'charSelect';
+    players[0].confirmed = false;
+    players[1].confirmed = false;
+    players[0].charIdx = 0;
+    players[1].charIdx = 1;
+    selectedStage = 0;
+    SFX.select();
+    keys['Enter'] = false;
+    keys['Space'] = false;
+    playMenuMusic();
+  }
+}
+
+function drawTitle() {
+  // BG
+  ctx.fillStyle = '#0a0a1a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Animated fire background
+  for (let i = 0; i < 30; i++) {
+    const x = (i * 37 + frameCount * 0.5) % W;
+    const y = H - Math.abs(Math.sin(frameCount * 0.02 + i) * 80) - 20;
+    const s = 4 + Math.random() * 4;
+    ctx.fillStyle = i % 3 === 0 ? '#ff4400' : (i % 3 === 1 ? '#ff8800' : '#ffcc00');
+    ctx.fillRect(x, y, s, s);
+  }
+
+  // Title with shadow
+  ctx.font = 'bold 28px monospace';
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'center';
+  ctx.fillText('DEFINITELY NOT', W/2 + 2, 82);
+  ctx.fillStyle = '#ff4444';
+  ctx.fillText('DEFINITELY NOT', W/2, 80);
+
+  ctx.font = 'bold 36px monospace';
+  ctx.fillStyle = '#000';
+  ctx.fillText('STREET FIGHTER', W/2 + 2, 122);
+  ctx.fillStyle = '#ffcc00';
+  ctx.fillText('STREET FIGHTER', W/2, 120);
+
+  // Subtitle
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#888';
+  ctx.fillText('(Any resemblance to existing fighting games is purely coincidental)', W/2, 145);
+
+  // Blinking text
+  if (titleBlink % 60 < 40) {
+    ctx.font = '16px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('PRESS ENTER TO START', W/2, 220);
+  }
+
+  // Controls info
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#666';
+  ctx.fillText('P1: WASD + F(Punch) G(Kick) R(Special) T(Block)', W/2, 280);
+  ctx.fillText('P2: Arrows + K(Punch) L(Kick) O(Special) P(Block)', W/2, 296);
+
+  // Copyright joke
+  ctx.font = '8px monospace';
+  ctx.fillStyle = '#444';
+  ctx.fillText('© 2026 TOTALLY ORIGINAL GAMES INC.', W/2, 370);
+  ctx.fillText('NOT AFFILIATED WITH CAPCOM IN ANY WAY WHATSOEVER', W/2, 380);
+
+  ctx.textAlign = 'left';
+}
+
+// ============================================================
+// CHARACTER SELECT
+// ============================================================
+
+let charSelectCooldown = [0, 0];
+
+function updateCharSelect() {
+  // P1 selection (WASD)
+  if (!players[0].confirmed) {
+    if (charSelectCooldown[0] <= 0) {
+      if (keys['KeyA'] || keys['KeyD']) {
+        const dir = keys['KeyD'] ? 1 : -1;
+        players[0].charIdx = (players[0].charIdx + dir + 4) % 4;
+        charSelectCooldown[0] = 12;
+        SFX.menuMove();
+      }
+      if (keys['KeyW'] || keys['KeyS']) {
+        selectedStage = (selectedStage + (keys['KeyS'] ? 1 : -1) + 4) % 4;
+        charSelectCooldown[0] = 12;
+        SFX.menuMove();
+      }
+    }
+    if (keys['KeyF'] || keys['KeyG']) {
+      players[0].confirmed = true;
+      SFX.select();
+      keys['KeyF'] = false; keys['KeyG'] = false;
+    }
+  }
+
+  // P2 selection (Arrows)
+  if (!players[1].confirmed) {
+    if (charSelectCooldown[1] <= 0) {
+      if (keys['ArrowLeft'] || keys['ArrowRight']) {
+        const dir = keys['ArrowRight'] ? 1 : -1;
+        players[1].charIdx = (players[1].charIdx + dir + 4) % 4;
+        charSelectCooldown[1] = 12;
+        SFX.menuMove();
+      }
+      if (keys['ArrowUp'] || keys['ArrowDown']) {
+        selectedStage = (selectedStage + (keys['ArrowDown'] ? 1 : -1) + 4) % 4;
+        charSelectCooldown[1] = 12;
+        SFX.menuMove();
+      }
+    }
+    if (keys['KeyK'] || keys['KeyL']) {
+      players[1].confirmed = true;
+      SFX.select();
+      keys['KeyK'] = false; keys['KeyL'] = false;
+    }
+  }
+
+  charSelectCooldown[0] = Math.max(0, charSelectCooldown[0] - 1);
+  charSelectCooldown[1] = Math.max(0, charSelectCooldown[1] - 1);
+
+  // Both confirmed - start fight
+  if (players[0].confirmed && players[1].confirmed) {
+    startFight();
+  }
+}
+
+function drawCharSelect() {
+  ctx.fillStyle = '#0a0a2a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = '#ff4444';
+  ctx.textAlign = 'center';
+  ctx.fillText('SELECT YOUR FIGHTER', W/2, 30);
+
+  // Character portraits
+  CHARACTERS.forEach((ch, i) => {
+    const x = 30 + i * 120;
+    const y = 50;
+    const w = 100, h = 120;
+
+    // Border
+    let borderColor = '#444';
+    if (players[0].charIdx === i && !players[0].confirmed) borderColor = '#4444ff';
+    if (players[1].charIdx === i && !players[1].confirmed) borderColor = '#ff4444';
+    if (players[0].charIdx === i && players[0].confirmed) borderColor = '#00ff00';
+    if (players[1].charIdx === i && players[1].confirmed) borderColor = '#00ff00';
+    if (players[0].charIdx === i && players[1].charIdx === i) borderColor = '#ffff00';
+
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+
+    // BG
+    ctx.fillStyle = '#1a1a3a';
+    ctx.fillRect(x+1, y+1, w-2, h-2);
+
+    // Draw character sprite
+    const sprite = drawCharSprite(ch, 'idle', frameCount, 'right');
+    ctx.drawImage(sprite, x + 18, y + 20, 64, 64);
+
+    // Name
+    ctx.font = 'bold 9px monospace';
+    ctx.fillStyle = ch.colors.accent;
+    ctx.textAlign = 'center';
+    ctx.fillText(ch.name, x + w/2, y + h - 18);
+
+    ctx.font = '7px monospace';
+    ctx.fillStyle = '#888';
+    ctx.fillText(ch.subtitle, x + w/2, y + h - 8);
+
+    // P1/P2 indicators
+    if (players[0].charIdx === i) {
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#4444ff';
+      ctx.fillText('P1', x + 15, y + 14);
+    }
+    if (players[1].charIdx === i) {
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#ff4444';
+      ctx.fillText('P2', x + w - 15, y + 14);
+    }
+  });
+
+  // Stage select
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#aaa';
+  ctx.textAlign = 'center';
+  ctx.fillText('STAGE: ' + STAGES[selectedStage].name, W/2, 200);
+  ctx.font = '9px monospace';
+  ctx.fillStyle = '#666';
+  ctx.fillText('(W/S or Up/Down to change stage)', W/2, 215);
+
+  // Stats for selected chars
+  for (let p = 0; p < 2; p++) {
+    const ch = CHARACTERS[players[p].charIdx];
+    const x = p === 0 ? 40 : 310;
+    const y = 230;
+
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = p === 0 ? '#4444ff' : '#ff4444';
+    ctx.textAlign = 'left';
+    ctx.fillText(`P${p+1}: ${ch.name}`, x, y);
+
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(`Speed: ${'★'.repeat(Math.round(ch.speed))}`, x, y + 16);
+    ctx.fillText(`Punch: ${ch.punchDamage}  Kick: ${ch.kickDamage}`, x, y + 28);
+    ctx.fillText(`Special: ${ch.specialName} (${ch.specialDamage}dmg)`, x, y + 40);
+
+    ctx.fillStyle = players[p].confirmed ? '#00ff00' : '#666';
+    ctx.fillText(players[p].confirmed ? '✓ READY!' : `Press ${p===0?'F/G':'K/L'} to confirm`, x, y + 56);
+  }
+
+  // Controls reminder
+  ctx.font = '8px monospace';
+  ctx.fillStyle = '#555';
+  ctx.textAlign = 'center';
+  ctx.fillText('P1: A/D select, F/G confirm  |  P2: ←/→ select, K/L confirm', W/2, 370);
+
+  ctx.textAlign = 'left';
+}
+
+// ============================================================
+// FIGHT LOGIC
+// ============================================================
+
+function startFight() {
+  gameState = 'fight';
+  stopMusic();
+  resetRound();
+  players[0].wins = 0;
+  players[1].wins = 0;
+  roundNum = 1;
+}
+
+function resetRound() {
+  players[0].x = 100;
+  players[1].x = 360;
+  players[0].hp = 100;
+  players[1].hp = 100;
+  players[0].state = 'idle';
+  players[1].state = 'idle';
+  players[0].stateTimer = 0;
+  players[1].stateTimer = 0;
+  players[0].facing = 'right';
+  players[1].facing = 'left';
+  players[0].velocity = 0;
+  players[1].velocity = 0;
+  players[0].cooldown = 0;
+  players[1].cooldown = 0;
+  players[0].hitstun = 0;
+  players[1].hitstun = 0;
+  players[0].blockstun = 0;
+  players[1].blockstun = 0;
+  players[0].specialCooldown = 0;
+  players[1].specialCooldown = 0;
+  roundTimer = 99;
+  roundTimerTick = 0;
+  roundState = 'announce';
+  roundAnnounceTimer = 120;
+  winner = -1;
+  projectiles = [];
+  particles = [];
+  SFX.roundAnnounce();
+}
+
+const GROUND_Y = H * 0.75 - 64;
+const FIGHT_LEFT = 20;
+const FIGHT_RIGHT = W - 84;
+
+function getAttackBox(player) {
+  const ch = CHARACTERS[player.charIdx];
+  const dir = player.facing === 'right' ? 1 : -1;
+  if (player.state === 'punch') {
+    return { x: player.x + (dir > 0 ? 44 : -18), y: GROUND_Y + 26, w: 22, h: 12 };
+  }
+  if (player.state === 'kick') {
+    return { x: player.x + (dir > 0 ? 44 : -24), y: GROUND_Y + 38, w: 24, h: 10 };
+  }
+  if (player.state === 'special') {
+    return { x: player.x + (dir > 0 ? 48 : -24), y: GROUND_Y + 20, w: 20, h: 20 };
+  }
+  return null;
+}
+
+function getHurtBox(player) {
+  return { x: player.x + 16, y: GROUND_Y + 8, w: 32, h: 52 };
+}
+
+function boxOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function updateFight() {
+  if (roundState === 'announce') {
+    roundAnnounceTimer--;
+    if (roundAnnounceTimer === 40) SFX.fight();
+    if (roundAnnounceTimer <= 0) {
+      roundState = 'fight';
+      playFightMusic();
+    }
+    return;
+  }
+
+  if (roundState === 'ko') {
+    roundAnnounceTimer--;
+    // Update KO'd player animation
+    players.forEach(p => {
+      if (p.state === 'ko') p.stateTimer++;
+    });
+    updateParticles();
+    if (roundAnnounceTimer <= 0) {
+      if (winner >= 0) {
+        players[winner].wins++;
+        if (players[winner].wins >= 2) {
+          matchWinner = winner;
+          gameState = 'matchEnd';
+          stopMusic();
+          SFX.win();
+          return;
+        }
+      }
+      roundNum++;
+      resetRound();
+    }
+    return;
+  }
+
+  // Timer
+  roundTimerTick++;
+  if (roundTimerTick >= 60) {
+    roundTimerTick = 0;
+    roundTimer--;
+    if (roundTimer <= 0) {
+      // Time out - whoever has more HP wins
+      if (players[0].hp > players[1].hp) endRound(0);
+      else if (players[1].hp > players[0].hp) endRound(1);
+      else endRound(-1); // draw
+      return;
+    }
+  }
+
+  // Player input and physics
+  updatePlayer(0, {
+    left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS',
+    punch: 'KeyF', kick: 'KeyG', special: 'KeyR', block: 'KeyT'
+  });
+  updatePlayer(1, {
+    left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown',
+    punch: 'KeyK', kick: 'KeyL', special: 'KeyO', block: 'KeyP'
+  });
+
+  // Face each other
+  if (players[0].state !== 'hit' && players[0].state !== 'ko') {
+    players[0].facing = players[0].x < players[1].x ? 'right' : 'left';
+  }
+  if (players[1].state !== 'hit' && players[1].state !== 'ko') {
+    players[1].facing = players[1].x < players[0].x ? 'right' : 'left';
+  }
+
+  // Hit detection
+  for (let a = 0; a < 2; a++) {
+    const b = 1 - a;
+    const attacker = players[a];
+    const defender = players[b];
+    const atkBox = getAttackBox(attacker);
+    const hurtBox = getHurtBox(defender);
+
+    if (atkBox && attacker.stateTimer === 4 && hurtBox && boxOverlap(atkBox, hurtBox)) {
+      const ch = CHARACTERS[attacker.charIdx];
+      let damage = 0;
+      if (attacker.state === 'punch') damage = ch.punchDamage;
+      else if (attacker.state === 'kick') damage = ch.kickDamage;
+      else if (attacker.state === 'special') damage = ch.specialDamage;
+
+      if (defender.state === 'block') {
+        damage = Math.floor(damage * 0.15);
+        defender.blockstun = 10;
+        SFX.block();
+        screenShake = 3;
+        for (let i = 0; i < 5; i++) addParticle(atkBox.x, atkBox.y, '#88ccff');
+      } else {
+        defender.hp = Math.max(0, defender.hp - damage);
+        defender.state = 'hit';
+        defender.stateTimer = 0;
+        defender.hitstun = 15;
+        if (attacker.state === 'punch') SFX.punch();
+        else if (attacker.state === 'kick') SFX.kick();
+        else SFX.special();
+        screenShake = attacker.state === 'special' ? 8 : 5;
+        // Hit particles
+        for (let i = 0; i < 8; i++) addParticle(atkBox.x + atkBox.w/2, atkBox.y, '#ff4444');
+        for (let i = 0; i < 4; i++) addParticle(atkBox.x + atkBox.w/2, atkBox.y, '#ffcc00');
+        // Knockback
+        const kb = attacker.state === 'special' ? 8 : 4;
+        defender.x += (attacker.facing === 'right' ? kb : -kb);
+      }
+
+      // KO check
+      if (defender.hp <= 0) {
+        defender.state = 'ko';
+        defender.stateTimer = 0;
+        endRound(a);
+        return;
+      }
+    }
+  }
+
+  // Update projectiles
+  projectiles.forEach(p => {
+    p.x += p.vx;
+    p.life--;
+    // Check hit
+    const target = players[1 - p.owner];
+    const hb = getHurtBox(target);
+    if (boxOverlap({x: p.x, y: p.y, w: 8, h: 8}, hb) && target.state !== 'ko') {
+      if (target.state === 'block') {
+        target.blockstun = 10;
+        SFX.block();
+        p.life = 0;
+      } else {
+        target.hp = Math.max(0, target.hp - 10);
+        target.state = 'hit';
+        target.stateTimer = 0;
+        target.hitstun = 12;
+        SFX.punch();
+        screenShake = 4;
+        p.life = 0;
+        for (let i = 0; i < 6; i++) addParticle(p.x, p.y, '#ff8800');
+        if (target.hp <= 0) {
+          target.state = 'ko';
+          target.stateTimer = 0;
+          endRound(p.owner);
+        }
+      }
+    }
+  });
+  projectiles = projectiles.filter(p => p.life > 0 && p.x > -20 && p.x < W + 20);
+
+  updateParticles();
+
+  // Screen shake decay
+  if (screenShake > 0) screenShake *= 0.85;
+  if (screenShake < 0.5) screenShake = 0;
+}
+
+function updatePlayer(idx, controls) {
+  const p = players[idx];
+  const ch = CHARACTERS[p.charIdx];
+
+  if (p.cooldown > 0) p.cooldown--;
+  if (p.specialCooldown > 0) p.specialCooldown--;
+
+  // Hitstun
+  if (p.hitstun > 0) {
+    p.hitstun--;
+    p.stateTimer++;
+    if (p.hitstun <= 0) {
+      p.state = 'idle';
+      p.stateTimer = 0;
+    }
+    return;
+  }
+
+  // Blockstun
+  if (p.blockstun > 0) {
+    p.blockstun--;
+    if (p.blockstun <= 0 && p.state === 'block' && !keys[controls.block]) {
+      p.state = 'idle';
+      p.stateTimer = 0;
+    }
+    return;
+  }
+
+  // Attack states
+  if (p.state === 'punch' || p.state === 'kick' || p.state === 'special') {
+    p.stateTimer++;
+    const dur = p.state === 'special' ? 20 : 12;
+    if (p.stateTimer >= dur) {
+      p.state = 'idle';
+      p.stateTimer = 0;
+      p.cooldown = 8;
+    }
+    return;
+  }
+
+  // Block
+  if (keys[controls.block]) {
+    p.state = 'block';
+    p.stateTimer++;
+    return;
+  } else if (p.state === 'block') {
+    p.state = 'idle';
+    p.stateTimer = 0;
+  }
+
+  // Movement
+  let moving = false;
+  if (keys[controls.left]) {
+    p.x -= ch.speed;
+    moving = true;
+  }
+  if (keys[controls.right]) {
+    p.x += ch.speed;
+    moving = true;
+  }
+
+  // Clamp position
+  p.x = Math.max(FIGHT_LEFT, Math.min(FIGHT_RIGHT, p.x));
+
+  // Push apart if overlapping
+  const other = players[1 - idx];
+  const dist = Math.abs(p.x - other.x);
+  if (dist < 40) {
+    if (p.x < other.x) p.x = other.x - 40;
+    else p.x = other.x + 40;
+    p.x = Math.max(FIGHT_LEFT, Math.min(FIGHT_RIGHT, p.x));
+  }
+
+  // Attacks
+  if (keys[controls.punch] && p.cooldown <= 0) {
+    p.state = 'punch';
+    p.stateTimer = 0;
+    p.cooldown = 15;
+    keys[controls.punch] = false;
+    return;
+  }
+  if (keys[controls.kick] && p.cooldown <= 0) {
+    p.state = 'kick';
+    p.stateTimer = 0;
+    p.cooldown = 15;
+    keys[controls.kick] = false;
+    return;
+  }
+  if (keys[controls.special] && p.cooldown <= 0 && p.specialCooldown <= 0) {
+    p.state = 'special';
+    p.stateTimer = 0;
+    p.cooldown = 20;
+    p.specialCooldown = 90;
+    keys[controls.special] = false;
+    return;
+  }
+
+  // Walking/idle
+  if (moving) {
+    if (p.state !== 'walk') { p.state = 'walk'; p.stateTimer = 0; }
+    p.stateTimer++;
+  } else {
+    if (p.state === 'walk') { p.state = 'idle'; p.stateTimer = 0; }
+    p.stateTimer++;
+  }
+}
+
+function endRound(winnerIdx) {
+  roundState = 'ko';
+  winner = winnerIdx;
+  roundAnnounceTimer = 150;
+  stopMusic();
+  SFX.ko();
+  flashTimer = 15;
+  screenShake = 12;
+  // KO particles
+  const loser = players[1 - winnerIdx];
+  if (loser) {
+    for (let i = 0; i < 20; i++) {
+      addParticle(loser.x + 32, GROUND_Y + 32, i % 2 === 0 ? '#ff4444' : '#ffcc00', 40);
+    }
+  }
+}
+
+function updateParticles() {
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.15;
+    p.life--;
+  });
+  particles = particles.filter(p => p.life > 0);
+}
+
+function drawFight() {
+  // Apply screen shake
+  ctx.save();
+  if (screenShake > 0) {
+    ctx.translate(
+      (Math.random() - 0.5) * screenShake * 2,
+      (Math.random() - 0.5) * screenShake * 2
+    );
+  }
+
+  // Draw stage
+  STAGES[selectedStage].draw(ctx, W, H, frameCount);
+
+  // Flash effect
+  if (flashTimer > 0) {
+    ctx.globalAlpha = flashTimer / 15 * 0.5;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+    flashTimer--;
+  }
+
+  // Draw players
+  for (let i = 0; i < 2; i++) {
+    const p = players[i];
+    const ch = CHARACTERS[p.charIdx];
+    const sprite = drawCharSprite(ch, p.state, p.stateTimer, p.facing);
+    ctx.drawImage(sprite, p.x, GROUND_Y, 64, 64);
+
+    // Shadow
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(p.x + 32, GROUND_Y + 62, 20, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw projectiles
+  projectiles.forEach(p => {
+    ctx.fillStyle = CHARACTERS[players[p.owner].charIdx].colors.accent;
+    ctx.beginPath();
+    ctx.arc(p.x + 4, p.y + 4, 4 + Math.sin(frameCount * 0.3), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(p.x + 4, p.y + 4, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Draw particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, 3, 3);
+  });
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+
+  // HUD (not affected by shake)
+  drawHUD();
+
+  // Round announce overlay
+  if (roundState === 'announce') {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, H/2 - 40, W, 80);
+
+    ctx.font = 'bold 32px monospace';
+    ctx.textAlign = 'center';
+
+    if (roundAnnounceTimer > 40) {
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillText(`ROUND ${roundNum}`, W/2, H/2 + 5);
+    } else {
+      ctx.fillStyle = '#ff4444';
+      ctx.fillText('FIGHT!', W/2, H/2 + 5);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // KO overlay
+  if (roundState === 'ko') {
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000';
+    ctx.fillText('K.O.!', W/2 + 3, H/2 + 3);
+    ctx.fillStyle = '#ff0000';
+    ctx.fillText('K.O.!', W/2, H/2);
+
+    if (winner >= 0 && roundAnnounceTimer < 80) {
+      ctx.font = '16px monospace';
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillText(`${CHARACTERS[players[winner].charIdx].name} WINS!`, W/2, H/2 + 30);
+    }
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawHUD() {
+  // Health bars background
+  ctx.fillStyle = '#111';
+  ctx.fillRect(10, 10, 200, 20);
+  ctx.fillRect(W - 210, 10, 200, 20);
+
+  // Health bars
+  const hp1w = (players[0].hp / players[0].maxHp) * 196;
+  const hp2w = (players[1].hp / players[1].maxHp) * 196;
+
+  // P1 health (fills from left)
+  const hp1color = players[0].hp > 50 ? '#00cc44' : (players[0].hp > 25 ? '#cccc00' : '#cc0000');
+  ctx.fillStyle = hp1color;
+  ctx.fillRect(12, 12, hp1w, 16);
+
+  // P2 health (fills from right)
+  const hp2color = players[1].hp > 50 ? '#00cc44' : (players[1].hp > 25 ? '#cccc00' : '#cc0000');
+  ctx.fillStyle = hp2color;
+  ctx.fillRect(W - 12 - hp2w, 12, hp2w, 16);
+
+  // Health bar borders
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, 200, 20);
+  ctx.strokeRect(W - 210, 10, 200, 20);
+
+  // Player names
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#4444ff';
+  ctx.textAlign = 'left';
+  ctx.fillText('P1 ' + CHARACTERS[players[0].charIdx].name, 12, 44);
+  ctx.fillStyle = '#ff4444';
+  ctx.textAlign = 'right';
+  ctx.fillText(CHARACTERS[players[1].charIdx].name + ' P2', W - 12, 44);
+
+  // Timer
+  ctx.font = 'bold 24px monospace';
+  ctx.fillStyle = roundTimer <= 10 ? '#ff0000' : '#ffcc00';
+  ctx.textAlign = 'center';
+  ctx.fillText(roundTimer.toString().padStart(2, '0'), W/2, 28);
+
+  // Round indicators (wins)
+  for (let i = 0; i < 2; i++) {
+    for (let w = 0; w < 2; w++) {
+      const x = i === 0 ? 220 + w * 16 : W - 236 - w * 16;
+      ctx.fillStyle = w < players[i].wins ? '#ffcc00' : '#333';
+      ctx.beginPath();
+      ctx.arc(x, 20, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Round number
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#888';
+  ctx.fillText(`ROUND ${roundNum}`, W/2, 44);
+
+  // Special cooldown indicator
+  for (let i = 0; i < 2; i++) {
+    const x = i === 0 ? 12 : W - 80;
+    const cd = players[i].specialCooldown;
+    const pct = 1 - (cd / 90);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x, 50, 68, 6);
+    ctx.fillStyle = pct >= 1 ? '#ff8800' : '#553300';
+    ctx.fillRect(x, 50, 68 * pct, 6);
+    ctx.font = '7px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.textAlign = i === 0 ? 'left' : 'right';
+    ctx.fillText('SP', i === 0 ? x : x + 68, 58 + 7);
+  }
+
+  ctx.textAlign = 'left';
+}
+
+// ============================================================
+// MATCH END SCREEN
+// ============================================================
+
+function drawMatchEnd() {
+  ctx.fillStyle = '#0a0a1a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Winner spotlight
+  const ch = CHARACTERS[players[matchWinner].charIdx];
+  const grd = ctx.createRadialGradient(W/2, H/2, 10, W/2, H/2, 200);
+  grd.addColorStop(0, ch.colors.accent + '44');
+  grd.addColorStop(1, '#0a0a1a');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+
+  // Winner text
+  ctx.font = 'bold 28px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffcc00';
+  ctx.fillText(ch.name, W/2, 60);
+
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('WINS!', W/2, 90);
+
+  // Draw winner sprite big
+  const sprite = drawCharSprite(ch, 'idle', frameCount, 'right');
+  ctx.drawImage(sprite, W/2 - 64, 100, 128, 128);
+
+  // Score
+  ctx.font = '14px monospace';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(`${players[0].wins} - ${players[1].wins}`, W/2, 250);
+
+  // Winner quote
+  const quote = ch.quotes[Math.floor(frameCount / 300) % ch.quotes.length];
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#ffcc00';
+  ctx.fillText(quote, W/2, 280);
+
+  // Prompt
+  if (frameCount % 60 < 40) {
+    ctx.font = '14px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('PRESS ENTER FOR REMATCH', W/2, 340);
+  }
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#888';
+  ctx.fillText('PRESS ESC FOR CHARACTER SELECT', W/2, 360);
+
+  ctx.textAlign = 'left';
+
+  // Input
+  if (keys['Enter']) {
+    keys['Enter'] = false;
+    startFight();
+  }
+  if (keys['Escape']) {
+    keys['Escape'] = false;
+    gameState = 'charSelect';
+    players[0].confirmed = false;
+    players[1].confirmed = false;
+    playMenuMusic();
+  }
+}
+
+// ============================================================
+// MAIN GAME LOOP
+// ============================================================
+
+function update() {
+  frameCount++;
+
+  switch(gameState) {
+    case 'title': updateTitle(); break;
+    case 'charSelect': updateCharSelect(); break;
+    case 'fight': updateFight(); break;
+    case 'matchEnd': break; // handled in draw
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  switch(gameState) {
+    case 'title': drawTitle(); break;
+    case 'charSelect': drawCharSelect(); break;
+    case 'fight': drawFight(); break;
+    case 'matchEnd': drawMatchEnd(); break;
+  }
+
+  // Scanline effect (subtle)
+  ctx.globalAlpha = 0.03;
+  for (let y = 0; y < H; y += 2) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, y, W, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// Start!
+gameLoop();
+
+</script>
+</body>
+</html>
