@@ -602,7 +602,7 @@ function applyHit(atk,def,dmg,hs,kb){
 // === AI ===
 const AI={
   tt:0,act:null,at:0,rb:0,ls:'idle',
-  prof:{easy:{rd:25,bc:.08,ar:.015,sr:.004,as:.5,rc:.05,pc:.05,ti:30},medium:{rd:12,bc:.3,ar:.04,sr:.012,as:.8,rc:.15,pc:.35,ti:15},hard:{rd:4,bc:.6,ar:.07,sr:.025,as:1,rc:.25,pc:.75,ti:6}},
+  prof:{easy:{rd:45,bc:.03,ar:.005,sr:.001,as:.25,rc:.02,pc:.02,ti:50},medium:{rd:18,bc:.2,ar:.025,sr:.008,as:.65,rc:.1,pc:.2,ti:20},hard:{rd:4,bc:.6,ar:.07,sr:.025,as:1,rc:.25,pc:.75,ti:6}},
   gp(){return this.prof[['easy','medium','hard'][cpuDiff]]||this.prof.medium},
   reset(){this.tt=0;this.act=null;this.at=0;this.rb=0;this.ls='idle'},
   update(cpu,hum){
