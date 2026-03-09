@@ -1731,35 +1731,7 @@ if(isTouchDevice){
   // Try on load if already landscape
   setTimeout(tryFS,500);
 }
-if(isTouchDevice){
-  const fsBtn=document.createElement('button');
-  fsBtn.id='fs-btn';
-  fsBtn.textContent='⛶ TAP FOR FULLSCREEN';
-  Object.assign(fsBtn.style,{
-    position:'fixed',bottom:'12px',left:'50%',transform:'translateX(-50%)',
-    zIndex:'9999',padding:'16px 32px',fontSize:'22px',fontWeight:'bold',
-    fontFamily:'monospace',background:'#ffcc00',color:'#000',
-    border:'4px solid #fff',borderRadius:'16px',cursor:'pointer',
-    boxShadow:'0 0 30px rgba(255,204,0,.7)',textShadow:'none',
-    animation:'pulse 1.5s infinite'
-  });
-  const style=document.createElement('style');
-  style.textContent='@keyframes pulse{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.08)}}';
-  document.head.appendChild(style);
-  fsBtn.addEventListener('touchstart',function(e){
-    e.preventDefault();e.stopPropagation();
-    const el=document.documentElement;
-    if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
-    else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
-    fsBtn.style.display='none';
-  });
-  document.body.appendChild(fsBtn);
-  // Hide button when already fullscreen
-  document.addEventListener('fullscreenchange',()=>{
-    if(document.fullscreenElement)fsBtn.style.display='none';
-    else fsBtn.style.display='block';
-  });
-}
+// Fullscreen button removed — auto-fullscreen on landscape + TAP TO START handles it
 loop();
 </script>
 </body>
