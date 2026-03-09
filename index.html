@@ -1235,7 +1235,12 @@ function update(){
     case'modeSelect':updateModeSelect();break;
     case'vsScreen':break;
     case'fight':updFight();break;
-    case'matchEnd':break;
+    case'matchEnd':{
+      const g0=gpi(0),g1=gpi(1);
+      if(ck('Enter')||ck('Space')||(g0&&g0.confirm)||(g1&&g1.confirm)){gs='vsScreen';vst=120;stopMusic()}
+      if(ck('Escape')||(g0&&g0.back)||(g1&&g1.back)){gs='charSelect';P[0].conf=P[1].conf=false;playMenuMusic()}
+      break;
+    }
   }
   // Clear just-pressed
   for(const k in jp2)jp2[k]=false;
