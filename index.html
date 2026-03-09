@@ -1725,7 +1725,8 @@ if(isTouchDevice){
     if(rfs)try{rfs.call(d)}catch(e){}
   }
   let fsRequested=false;
-  document.addEventListener('touchstart',function(){if(!fsRequested){fsRequested=true;tryFS()}},{once:false,passive:true});
+  document.addEventListener('touchstart',function(e){if(!fsRequested){fsRequested=true;tryFS()}},{once:false,passive:false});
+  document.addEventListener('click',function(){if(!fsRequested){fsRequested=true;tryFS()}});
   window.addEventListener('orientationchange',()=>{const o=screen.orientation?screen.orientation.angle:(window.orientation||0);if(Math.abs(o)===90||Math.abs(o)===270||Math.abs(o)===-90)tryFS()});
   if(screen.orientation)screen.orientation.addEventListener('change',()=>{if(screen.orientation.type.includes('landscape'))tryFS()});
 }
