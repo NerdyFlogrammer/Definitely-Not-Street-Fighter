@@ -1079,7 +1079,7 @@ function updateCharSelect(){
     const kU=isP1?keys['KeyW']:keys['ArrowUp'];const kD=isP1?keys['KeyS']:keys['ArrowDown'];
     if(kL||kR||(gp&&gp.mL)||(gp&&gp.mR)){P[p].ci=(P[p].ci+((kR||(gp&&gp.mR))?1:-1)+4)%4;csCd[p]=10;SFX.menuMove()}
     if(kU||kD||(gp&&gp.mU)||(gp&&gp.mD)){selStage=(selStage+((kD||(gp&&gp.mD))?1:-1)+4)%4;csCd[p]=10;SFX.menuMove()}
-    const conf=isP1?(ck('KeyF')||ck('KeyG')):(ck('Numpad1')||ck('Numpad2')||ck('KeyK'));
+    const conf=isP1?(ck('KeyF')||ck('KeyG')):(ck('Digit1')||ck('Digit2')||ck('Numpad1')||ck('Numpad2')||ck('KeyK'));
     if(conf||(gp&&gp.confirm)){P[p].conf=true;SFX.select()}
   }
   if(P[0].conf&&P[1].conf){gs='modeSelect';msIdx=0;dsIdx=1;msPh=0;msCd=12}
