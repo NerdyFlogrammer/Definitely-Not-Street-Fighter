@@ -1717,7 +1717,20 @@ drawTitle=function(){
   }
 };
 
-// Fullscreen button for mobile
+// Auto-fullscreen on landscape
+if(isTouchDevice){
+  function tryFS(){
+    if(!document.fullscreenElement&&screen.orientation&&screen.orientation.type.includes('landscape')){
+      const el=document.documentElement;
+      if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
+      else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+    }
+  }
+  if(screen.orientation)screen.orientation.addEventListener('change',tryFS);
+  window.addEventListener('orientationchange',()=>setTimeout(tryFS,300));
+  // Try on load if already landscape
+  setTimeout(tryFS,500);
+}
 if(isTouchDevice){
   const fsBtn=document.createElement('button');
   fsBtn.id='fs-btn';
