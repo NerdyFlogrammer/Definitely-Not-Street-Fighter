@@ -16,6 +16,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; cursor: none;
 // ============================================================
 // DEFINITELY NOT STREET FIGHTER
 // A retro SNES-style 2D fighting game
+// Now with AI opponent & Gamepad support!
 // ============================================================
 
 const canvas = document.getElementById('game');
@@ -149,7 +150,6 @@ function playFightMusic() {
 // PIXEL ART SPRITE SYSTEM
 // ============================================================
 
-// Create an offscreen canvas for drawing sprites
 function createSprite(w, h, drawFn) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -158,13 +158,11 @@ function createSprite(w, h, drawFn) {
   return c;
 }
 
-// Draw a pixel at scaled size
 function px(cx, x, y, color, size = 1) {
   cx.fillStyle = color;
   cx.fillRect(x, y, size, size);
 }
 
-// Draw a rect of pixels
 function pxRect(cx, x, y, w, h, color) {
   cx.fillStyle = color;
   cx.fillRect(x, y, w, h);
@@ -257,25 +255,16 @@ function drawCharSprite(charDef, pose, frame, facing) {
       cx.scale(-1, 1);
     }
 
-    // Common body parts helper
     const drawBody = (headY, bodyY, legSpread, armPose) => {
-      // Legs
       pxRect(cx, 22, bodyY + 16, 6, 14, c.body);
       pxRect(cx, 36, bodyY + 16, 6, 14, c.body);
-      // Shoes
       pxRect(cx, 20, bodyY + 28, 8, 4, '#333');
       pxRect(cx, 34, bodyY + 28, 8, 4, '#333');
-      // Body/torso
       pxRect(cx, 20, bodyY, 24, 18, c.body);
-      // Belt
       pxRect(cx, 20, bodyY + 14, 24, 3, c.belt);
-      // Accent stripe
       pxRect(cx, 20, bodyY + 4, 24, 2, c.accent);
-      // Head
       pxRect(cx, 24, headY, 16, 16, c.skin);
-      // Hair
       pxRect(cx, 23, headY - 2, 18, 6, c.hair);
-      // Eyes
       pxRect(cx, 28, headY + 6, 3, 3, '#fff');
       pxRect(cx, 35, headY + 6, 3, 3, '#fff');
       pxRect(cx, 29, headY + 7, 2, 2, c.eyes);
@@ -286,10 +275,8 @@ function drawCharSprite(charDef, pose, frame, facing) {
       case 'idle': {
         const b = Math.floor(bob);
         drawBody(12 + b, 28 + b, 0);
-        // Arms at sides
         pxRect(cx, 14, 30 + b, 6, 12, c.skin);
         pxRect(cx, 44, 30 + b, 6, 12, c.skin);
-        // Fists
         pxRect(cx, 14, 40 + b, 6, 4, c.skin);
         pxRect(cx, 44, 40 + b, 6, 4, c.skin);
         break;
@@ -297,50 +284,40 @@ function drawCharSprite(charDef, pose, frame, facing) {
       case 'walk': {
         const step = Math.sin(frame * 0.3) * 4;
         drawBody(12, 28, 0);
-        // Animated legs
         pxRect(cx, 22, 44 + step, 6, 14, c.body);
         pxRect(cx, 36, 44 - step, 6, 14, c.body);
         pxRect(cx, 20, 56 + step, 8, 4, '#333');
         pxRect(cx, 34, 56 - step, 8, 4, '#333');
-        // Arms swinging
         pxRect(cx, 14, 30 - step, 6, 12, c.skin);
         pxRect(cx, 44, 30 + step, 6, 12, c.skin);
         break;
       }
       case 'punch': {
         drawBody(12, 28, 0);
-        // Punching arm extended
         pxRect(cx, 44, 30, 18, 6, c.skin);
         pxRect(cx, 58, 28, 6, 8, c.skin);
-        // Impact flash
         if (frame % 4 < 2) {
           pxRect(cx, 60, 26, 4, 4, '#ff0');
           pxRect(cx, 58, 24, 3, 3, '#f80');
         }
-        // Other arm
         pxRect(cx, 14, 32, 6, 10, c.skin);
         break;
       }
       case 'kick': {
         drawBody(10, 26, 0);
-        // Kicking leg extended
         pxRect(cx, 44, 44, 16, 6, c.body);
         pxRect(cx, 56, 42, 8, 8, '#333');
-        // Impact
         if (frame % 4 < 2) {
           pxRect(cx, 60, 40, 4, 4, '#ff0');
         }
-        // Arms in guard
         pxRect(cx, 16, 28, 6, 10, c.skin);
         pxRect(cx, 42, 28, 6, 10, c.skin);
         break;
       }
       case 'special': {
         drawBody(10, 26, 0);
-        // Arms forward channeling
         pxRect(cx, 44, 28, 12, 6, c.skin);
         pxRect(cx, 14, 28, 6, 10, c.skin);
-        // Energy ball
         const r = 6 + Math.sin(frame * 0.5) * 2;
         cx.fillStyle = c.accent;
         cx.beginPath();
@@ -350,7 +327,6 @@ function drawCharSprite(charDef, pose, frame, facing) {
         cx.beginPath();
         cx.arc(62, 32, r * 0.5, 0, Math.PI * 2);
         cx.fill();
-        // Sparkles
         if (frame % 3 === 0) {
           pxRect(cx, 56 + Math.random()*12, 26 + Math.random()*12, 2, 2, '#fff');
         }
@@ -358,10 +334,8 @@ function drawCharSprite(charDef, pose, frame, facing) {
       }
       case 'block': {
         drawBody(14, 30, 0);
-        // Arms crossed in front
         pxRect(cx, 26, 30, 6, 14, c.skin);
         pxRect(cx, 32, 30, 6, 14, c.skin);
-        // Shield shimmer
         if (frame % 6 < 3) {
           cx.globalAlpha = 0.3;
           pxRect(cx, 22, 28, 20, 18, '#88ccff');
@@ -370,21 +344,17 @@ function drawCharSprite(charDef, pose, frame, facing) {
         break;
       }
       case 'hit': {
-        // Leaning back
         drawBody(14, 30, 0);
         pxRect(cx, 10, 32, 6, 10, c.skin);
         pxRect(cx, 44, 34, 6, 10, c.skin);
-        // Pain stars
         pxRect(cx, 30, 10, 3, 3, '#ff0');
         pxRect(cx, 38, 8, 2, 2, '#f80');
         pxRect(cx, 24, 12, 2, 2, '#ff0');
         break;
       }
       case 'ko': {
-        // Lying on ground
-        pxRect(cx, 8, 48, 16, 12, c.skin); // head
+        pxRect(cx, 8, 48, 16, 12, c.skin);
         pxRect(cx, 6, 46, 18, 5, c.hair);
-        // X eyes
         pxRect(cx, 12, 52, 2, 2, '#f00');
         pxRect(cx, 14, 54, 2, 2, '#f00');
         pxRect(cx, 14, 52, 2, 2, '#f00');
@@ -393,13 +363,10 @@ function drawCharSprite(charDef, pose, frame, facing) {
         pxRect(cx, 21, 54, 2, 2, '#f00');
         pxRect(cx, 21, 52, 2, 2, '#f00');
         pxRect(cx, 19, 54, 2, 2, '#f00');
-        // Body flat
         pxRect(cx, 22, 46, 28, 12, c.body);
         pxRect(cx, 22, 54, 28, 3, c.belt);
-        // Legs
         pxRect(cx, 48, 46, 14, 8, c.body);
         pxRect(cx, 58, 46, 4, 8, '#333');
-        // Stars circling
         const starAngle = frame * 0.1;
         for (let s = 0; s < 3; s++) {
           const sx = 16 + Math.cos(starAngle + s * 2.1) * 12;
@@ -410,38 +377,29 @@ function drawCharSprite(charDef, pose, frame, facing) {
       }
     }
 
-    // Character-specific details
     if (charDef.id === 'ninja' && pose !== 'ko') {
-      // Mask
       pxRect(cx, 24, 38 + (pose==='idle'?Math.floor(bob):0) + (pose==='hit'?2:0) + 6, 16, 4, '#333');
-      // Headband tails
       pxRect(cx, 18, 12 + (pose==='idle'?Math.floor(bob):0), 6, 2, '#cc2222');
     }
     if (charDef.id === 'brawler' && pose !== 'ko') {
-      // Thick arms (draw over)
       const by = pose==='idle'?Math.floor(bob):0;
       if (pose === 'idle' || pose === 'walk') {
         pxRect(cx, 12, 30+by, 8, 14, c.skin);
         pxRect(cx, 44, 30+by, 8, 14, c.skin);
       }
-      // Championship belt sparkle
       if (frame % 10 < 3) {
         pxRect(cx, 30, (pose==='idle'?42+Math.floor(bob):42), 4, 2, '#ff0');
       }
     }
     if (charDef.id === 'monk' && pose !== 'ko') {
-      // Bald head (no hair redraw needed, hair color is light)
-      // Prayer beads
       const by = pose==='idle'?Math.floor(bob):0;
       for (let b = 0; b < 5; b++) {
         pxRect(cx, 22 + b*4, 28+by, 2, 2, '#884400');
       }
     }
     if (charDef.id === 'hacker' && pose !== 'ko') {
-      // Visor/goggles
       const by = pose==='idle'?Math.floor(bob):0;
       pxRect(cx, 26, 18+by, 14, 3, '#00ff88');
-      // Digital particles
       if (frame % 4 === 0 && (pose === 'special' || pose === 'idle')) {
         pxRect(cx, 20+Math.random()*24, 26+by+Math.random()*20, 2, 2, '#00ff88');
       }
@@ -457,7 +415,6 @@ const STAGES = [
   {
     name: 'ANCIENT DOJO',
     draw(cx, w, h, frame) {
-      // Sky gradient
       for (let y = 0; y < h * 0.4; y++) {
         const t = y / (h * 0.4);
         const r = Math.floor(40 + t * 60);
@@ -465,36 +422,28 @@ const STAGES = [
         const b = Math.floor(80 + t * 40);
         pxRect(cx, 0, y, w, 1, `rgb(${r},${g},${b})`);
       }
-      // Mountains
       cx.fillStyle = '#2a1a3a';
       cx.beginPath();
       cx.moveTo(0, h*0.4); cx.lineTo(80, h*0.2); cx.lineTo(160, h*0.35);
       cx.lineTo(250, h*0.15); cx.lineTo(340, h*0.3); cx.lineTo(420, h*0.18);
       cx.lineTo(w, h*0.35); cx.lineTo(w, h*0.4); cx.closePath(); cx.fill();
-      // Dojo building
       pxRect(cx, 100, h*0.25, 312, h*0.55, '#5a3a1a');
       pxRect(cx, 90, h*0.22, 332, 12, '#8b4513');
-      // Roof
       cx.fillStyle = '#3a1a0a';
       cx.beginPath();
       cx.moveTo(80, h*0.22); cx.lineTo(256, h*0.1); cx.lineTo(432, h*0.22); cx.closePath(); cx.fill();
-      // Pillars
       for (let i = 0; i < 4; i++) {
         pxRect(cx, 120 + i * 90, h*0.25, 16, h*0.55, '#8b4513');
       }
-      // Floor
       pxRect(cx, 0, h*0.75, w, h*0.25, '#4a2a0a');
-      // Floor lines
       for (let i = 0; i < 8; i++) {
         pxRect(cx, i * 66, h*0.75, 1, h*0.25, '#3a1a00');
       }
-      // Lanterns
       for (let i = 0; i < 3; i++) {
         const lx = 150 + i * 100;
         pxRect(cx, lx, h*0.28, 12, 16, '#ff4400');
         if (frame % 8 < 4) pxRect(cx, lx+2, h*0.28+2, 8, 8, '#ffaa00');
       }
-      // Japanese banner
       pxRect(cx, 250, h*0.25, 20, 60, '#cc0000');
       cx.fillStyle = '#fff';
       cx.font = '8px monospace';
@@ -505,19 +454,15 @@ const STAGES = [
   {
     name: 'NEON STREET',
     draw(cx, w, h, frame) {
-      // Night sky
       pxRect(cx, 0, 0, w, h, '#0a0a1a');
-      // Stars
       for (let i = 0; i < 20; i++) {
         const sx = (i * 47 + 13) % w;
         const sy = (i * 31 + 7) % (h * 0.3);
         if ((frame + i) % 12 < 8) pxRect(cx, sx, sy, 2, 2, '#ffffff');
       }
-      // Buildings background
       const buildings = [[0,120,80],[70,100,70],[130,140,90],[210,90,65],[270,130,85],[345,110,75],[410,145,w-410]];
       buildings.forEach(([x, bh, bw]) => {
         pxRect(cx, x, h*0.75 - bh, bw, bh, '#1a1a2e');
-        // Windows
         for (let wy = 0; wy < bh - 15; wy += 15) {
           for (let wx = 5; wx < bw - 5; wx += 12) {
             const lit = ((x + wx + wy + frame) * 7) % 11 < 6;
@@ -525,7 +470,6 @@ const STAGES = [
           }
         }
       });
-      // Neon signs
       if (frame % 20 < 15) {
         pxRect(cx, 150, h*0.35, 60, 12, '#ff0066');
         cx.fillStyle = '#fff';
@@ -538,19 +482,15 @@ const STAGES = [
         cx.font = '8px monospace';
         cx.fillText('OPEN', 326, h*0.32 + 10);
       }
-      // Street
       pxRect(cx, 0, h*0.75, w, h*0.25, '#2a2a3a');
-      // Street markings
       for (let i = 0; i < 8; i++) {
         pxRect(cx, i * 80 + (frame % 80), h*0.85, 40, 3, '#ffff44');
       }
-      // Streetlights
       for (let i = 0; i < 3; i++) {
         const lx = 60 + i * 200;
         pxRect(cx, lx, h*0.45, 4, h*0.3, '#555');
         pxRect(cx, lx - 6, h*0.45, 16, 8, '#666');
         pxRect(cx, lx - 2, h*0.44, 8, 4, '#ffdd88');
-        // Light cone
         cx.globalAlpha = 0.1;
         cx.fillStyle = '#ffdd88';
         cx.beginPath();
@@ -563,7 +503,6 @@ const STAGES = [
   {
     name: 'SUNSET HARBOR',
     draw(cx, w, h, frame) {
-      // Sunset sky
       for (let y = 0; y < h * 0.5; y++) {
         const t = y / (h * 0.5);
         const r = Math.floor(255 - t * 100);
@@ -571,36 +510,28 @@ const STAGES = [
         const b = Math.floor(50 + t * 100);
         pxRect(cx, 0, y, w, 1, `rgb(${r},${g},${b})`);
       }
-      // Sun
       cx.fillStyle = '#ffcc00';
       cx.beginPath(); cx.arc(380, h*0.2, 30, 0, Math.PI*2); cx.fill();
       cx.fillStyle = '#ffee66';
       cx.beginPath(); cx.arc(380, h*0.2, 22, 0, Math.PI*2); cx.fill();
-      // Water
       for (let y = Math.floor(h*0.5); y < Math.floor(h*0.75); y++) {
         const t = (y - h*0.5) / (h*0.25);
         pxRect(cx, 0, y, w, 1, `rgb(${Math.floor(20+t*20)},${Math.floor(60+t*30)},${Math.floor(120+t*40)})`);
-        // Water shimmer
         if ((y + frame) % 6 < 2) {
           pxRect(cx, (y * 37 + frame * 2) % w, y, 20, 1, 'rgba(255,200,100,0.3)');
         }
       }
-      // Ships
       pxRect(cx, 80 + Math.sin(frame*0.02)*10, h*0.45, 40, 15, '#4a3020');
       pxRect(cx, 95 + Math.sin(frame*0.02)*10, h*0.3, 3, h*0.15, '#5a4030');
       pxRect(cx, 300 + Math.sin(frame*0.015)*8, h*0.42, 30, 12, '#5a4030');
-      // Dock/pier
       pxRect(cx, 0, h*0.72, w, 6, '#6a4a2a');
       for (let i = 0; i < 10; i++) {
         pxRect(cx, i * 55 + 10, h*0.72, 6, h*0.28, '#5a3a1a');
       }
-      // Ground
       pxRect(cx, 0, h*0.75, w, h*0.25, '#8a7a6a');
-      // Crates
       pxRect(cx, 20, h*0.75-20, 24, 20, '#8b6914');
       pxRect(cx, 50, h*0.75-16, 20, 16, '#9b7924');
       pxRect(cx, 440, h*0.75-18, 22, 18, '#8b6914');
-      // Seagulls
       for (let i = 0; i < 3; i++) {
         const bx = (i * 170 + frame * 0.5) % (w + 40) - 20;
         const by = h*0.15 + Math.sin(frame*0.03+i)*10;
@@ -613,7 +544,6 @@ const STAGES = [
   {
     name: 'MYSTIC TEMPLE',
     draw(cx, w, h, frame) {
-      // Mystical gradient sky
       for (let y = 0; y < h * 0.5; y++) {
         const t = y / (h * 0.5);
         const r = Math.floor(20 + t * 30);
@@ -621,14 +551,11 @@ const STAGES = [
         const b = Math.floor(50 + t * 60);
         pxRect(cx, 0, y, w, 1, `rgb(${r},${g},${b})`);
       }
-      // Moon
       cx.fillStyle = '#ddeeff';
       cx.beginPath(); cx.arc(100, 50, 24, 0, Math.PI*2); cx.fill();
       cx.fillStyle = '#0a0a2a';
       cx.beginPath(); cx.arc(108, 46, 22, 0, Math.PI*2); cx.fill();
-      // Temple structure
       pxRect(cx, 130, h*0.2, 252, h*0.6, '#3a2a4a');
-      // Temple roof tiers
       for (let t = 0; t < 3; t++) {
         const tw = 280 - t * 40;
         const tx = 116 + t * 20;
@@ -637,17 +564,13 @@ const STAGES = [
         cx.beginPath();
         cx.moveTo(tx, ty + 30); cx.lineTo(tx + tw/2, ty); cx.lineTo(tx + tw, ty + 30);
         cx.closePath(); cx.fill();
-        // Roof edge
         pxRect(cx, tx, ty + 28, tw, 3, '#5a3a6a');
       }
-      // Temple door
       pxRect(cx, 226, h*0.5, 60, h*0.3, '#1a0a2a');
       pxRect(cx, 224, h*0.48, 64, 4, '#aa8800');
-      // Pillars
       for (let i = 0; i < 2; i++) {
         pxRect(cx, 150 + i * 200, h*0.2, 14, h*0.6, '#5a3a6a');
       }
-      // Floating particles/fireflies
       for (let i = 0; i < 15; i++) {
         const px2 = (i * 67 + Math.sin(frame * 0.02 + i) * 30 + frame * 0.3) % w;
         const py = (i * 43 + Math.cos(frame * 0.015 + i) * 20) % (h * 0.7);
@@ -656,14 +579,11 @@ const STAGES = [
         pxRect(cx, px2, py, 2, 2, i % 3 === 0 ? '#ff88ff' : '#88ffff');
       }
       cx.globalAlpha = 1;
-      // Ground
       pxRect(cx, 0, h*0.75, w, h*0.25, '#2a1a1a');
-      // Stone path
       for (let i = 0; i < 12; i++) {
         pxRect(cx, i * 44 + 5, h*0.78, 36, 8, '#3a2a2a');
         pxRect(cx, i * 44 + 5, h*0.78, 36, 1, '#4a3a3a');
       }
-      // Incense smoke
       for (let i = 0; i < 3; i++) {
         const sx = 210 + i * 50;
         for (let s = 0; s < 4; s++) {
@@ -678,14 +598,124 @@ const STAGES = [
 ];
 
 // ============================================================
+// GAMEPAD SYSTEM (HTML5 Gamepad API)
+// ============================================================
+
+// Xbox controller mapping (Standard Gamepad):
+// Buttons: 0=A, 1=B, 2=X, 3=Y, 4=LB, 5=RB, 6=LT, 7=RT, 8=Back, 9=Start,
+//          10=LS, 11=RS, 12=DUp, 13=DDown, 14=DLeft, 15=DRight
+// Axes: 0=LS-X, 1=LS-Y, 2=RS-X, 3=RS-Y
+
+const gamepadStates = [null, null]; // Processed button states per player
+const prevGamepadButtons = [[], []];
+const connectedGamepads = [false, false];
+
+// Gamepad button mapping per player:
+// D-pad: movement, A(0)/X(2): punch/kick, B(1): special, LB(4)/RB(5): block
+const GP_MAP = {
+  dpadUp: 12, dpadDown: 13, dpadLeft: 14, dpadRight: 15,
+  a: 0, x: 2, b: 1, y: 3,
+  lb: 4, rb: 5, lt: 6, rt: 7,
+  start: 9, back: 8
+};
+
+const AXIS_DEADZONE = 0.4;
+
+function pollGamepads() {
+  const rawPads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let padIdx = 0;
+  for (let i = 0; i < rawPads.length && padIdx < 2; i++) {
+    const gp = rawPads[i];
+    if (!gp) continue;
+    connectedGamepads[padIdx] = true;
+
+    const prev = prevGamepadButtons[padIdx] || [];
+    const btns = {};
+    const justPressed = {};
+
+    // Buttons
+    for (let b = 0; b < gp.buttons.length; b++) {
+      btns[b] = gp.buttons[b].pressed;
+      justPressed[b] = gp.buttons[b].pressed && !prev[b];
+    }
+
+    // Axes → virtual d-pad
+    const lsX = gp.axes[0] || 0;
+    const lsY = gp.axes[1] || 0;
+    if (lsX < -AXIS_DEADZONE) { btns[GP_MAP.dpadLeft] = true; if (!prev[GP_MAP.dpadLeft]) justPressed[GP_MAP.dpadLeft] = true; }
+    if (lsX > AXIS_DEADZONE)  { btns[GP_MAP.dpadRight] = true; if (!prev[GP_MAP.dpadRight]) justPressed[GP_MAP.dpadRight] = true; }
+    if (lsY < -AXIS_DEADZONE) { btns[GP_MAP.dpadUp] = true; if (!prev[GP_MAP.dpadUp]) justPressed[GP_MAP.dpadUp] = true; }
+    if (lsY > AXIS_DEADZONE)  { btns[GP_MAP.dpadDown] = true; if (!prev[GP_MAP.dpadDown]) justPressed[GP_MAP.dpadDown] = true; }
+
+    // Save for next frame diff
+    const savePrev = [];
+    for (let b = 0; b < 20; b++) savePrev[b] = btns[b] || false;
+    // Also include virtual d-pad from axes
+    savePrev[GP_MAP.dpadLeft] = btns[GP_MAP.dpadLeft] || false;
+    savePrev[GP_MAP.dpadRight] = btns[GP_MAP.dpadRight] || false;
+    savePrev[GP_MAP.dpadUp] = btns[GP_MAP.dpadUp] || false;
+    savePrev[GP_MAP.dpadDown] = btns[GP_MAP.dpadDown] || false;
+    prevGamepadButtons[padIdx] = savePrev;
+
+    gamepadStates[padIdx] = { btns, justPressed };
+    padIdx++;
+  }
+  // Mark disconnected
+  for (let i = padIdx; i < 2; i++) {
+    connectedGamepads[i] = false;
+    gamepadStates[i] = null;
+  }
+}
+
+// Map gamepad to virtual key presses for a player
+// Returns object of control keys currently "held" and "justPressed"
+function getGamepadInput(playerIdx) {
+  const gp = gamepadStates[playerIdx];
+  if (!gp) return null;
+  return {
+    left: gp.btns[GP_MAP.dpadLeft] || false,
+    right: gp.btns[GP_MAP.dpadRight] || false,
+    up: gp.btns[GP_MAP.dpadUp] || false,
+    down: gp.btns[GP_MAP.dpadDown] || false,
+    punch: gp.justPressed[GP_MAP.a] || false,        // A = punch
+    kick: gp.justPressed[GP_MAP.x] || false,          // X = kick
+    special: gp.justPressed[GP_MAP.b] || false,        // B = special
+    block: gp.btns[GP_MAP.lb] || gp.btns[GP_MAP.rb] || false, // LB/RB = block (hold)
+    confirm: gp.justPressed[GP_MAP.a] || gp.justPressed[GP_MAP.start] || false,
+    menuLeft: gp.justPressed[GP_MAP.dpadLeft] || false,
+    menuRight: gp.justPressed[GP_MAP.dpadRight] || false,
+    menuUp: gp.justPressed[GP_MAP.dpadUp] || false,
+    menuDown: gp.justPressed[GP_MAP.dpadDown] || false,
+    start: gp.justPressed[GP_MAP.start] || false,
+    back: gp.justPressed[GP_MAP.back] || false,
+  };
+}
+
+window.addEventListener('gamepadconnected', (e) => {
+  console.log('Gamepad connected:', e.gamepad.id);
+  ensureAudio();
+});
+window.addEventListener('gamepaddisconnected', (e) => {
+  console.log('Gamepad disconnected:', e.gamepad.id);
+});
+
+// ============================================================
 // GAME STATE
 // ============================================================
 
-let gameState = 'title'; // title, charSelect, fight, roundEnd, matchEnd
+let gameState = 'title'; // title, charSelect, modeSelect, fight, roundEnd, matchEnd
 let selectedStage = 0;
 let frameCount = 0;
 let screenShake = 0;
 let flashTimer = 0;
+
+// Game mode
+let gameMode = 'pvp'; // 'pvp' or 'cpu'
+let cpuDifficulty = 1; // 0=easy, 1=medium, 2=hard
+let modeSelectIdx = 0; // 0=VS PLAYER, 1=VS CPU
+let diffSelectIdx = 1; // 0=EASY, 1=MEDIUM, 2=HARD
+let modeSelectPhase = 0; // 0=mode, 1=difficulty
+let modeSelectCooldown = 0;
 
 // Input
 const keys = {};
@@ -706,7 +736,7 @@ let roundAnnounceTimer = 0;
 let winner = -1;
 let matchWinner = -1;
 let titleBlink = 0;
-let titleSelected = 0; // 0=fight, 1=???
+let titleSelected = 0;
 
 // Projectiles
 let projectiles = [];
@@ -726,12 +756,293 @@ function addParticle(x, y, color, life = 20) {
 }
 
 // ============================================================
+// AI OPPONENT SYSTEM
+// ============================================================
+
+const AI = {
+  // Internal state for the AI
+  thinkTimer: 0,
+  currentAction: null, // { type: 'approach'|'attack'|'block'|'retreat'|'idle', duration: N }
+  actionTimer: 0,
+  reactionBuffer: 0, // frames before AI reacts to opponent's action
+  lastOpponentState: 'idle',
+  comboStep: 0,
+  comboTimer: 0,
+
+  // Difficulty profiles
+  profiles: {
+    easy: {
+      reactionDelay: 25,     // Slow reactions (frames)
+      blockChance: 0.08,     // Rarely blocks
+      attackRate: 0.015,     // Infrequent attacks
+      specialRate: 0.004,    // Rarely uses special
+      approachSpeed: 0.5,    // Slow approach
+      retreatChance: 0.05,   // Rarely retreats
+      punishChance: 0.05,    // Almost never punishes
+      comboChance: 0,        // No combos
+      optimalRange: false,   // Doesn't seek optimal range
+      thinkInterval: 30,     // Thinks slowly
+      wanderChance: 0.3,     // Often wanders randomly
+    },
+    medium: {
+      reactionDelay: 12,
+      blockChance: 0.3,
+      attackRate: 0.04,
+      specialRate: 0.012,
+      approachSpeed: 0.8,
+      retreatChance: 0.15,
+      punishChance: 0.35,
+      comboChance: 0.2,
+      optimalRange: true,
+      thinkInterval: 15,
+      wanderChance: 0.1,
+    },
+    hard: {
+      reactionDelay: 4,
+      blockChance: 0.6,
+      attackRate: 0.07,
+      specialRate: 0.025,
+      approachSpeed: 1.0,
+      retreatChance: 0.25,
+      punishChance: 0.75,
+      comboChance: 0.5,
+      optimalRange: true,
+      thinkInterval: 6,
+      wanderChance: 0.02,
+    }
+  },
+
+  getProfile() {
+    const names = ['easy', 'medium', 'hard'];
+    return this.profiles[names[cpuDifficulty]] || this.profiles.medium;
+  },
+
+  reset() {
+    this.thinkTimer = 0;
+    this.currentAction = null;
+    this.actionTimer = 0;
+    this.reactionBuffer = 0;
+    this.lastOpponentState = 'idle';
+    this.comboStep = 0;
+    this.comboTimer = 0;
+  },
+
+  // Returns virtual control inputs for the CPU player
+  update(cpuPlayer, humanPlayer) {
+    const prof = this.getProfile();
+    const input = { left: false, right: false, up: false, down: false, punch: false, kick: false, special: false, block: false };
+
+    // Can't act if in hitstun/blockstun/attacking/KO
+    if (cpuPlayer.hitstun > 0 || cpuPlayer.blockstun > 0 || cpuPlayer.state === 'ko') return input;
+    if (cpuPlayer.state === 'punch' || cpuPlayer.state === 'kick' || cpuPlayer.state === 'special') return input;
+
+    const dist = Math.abs(cpuPlayer.x - humanPlayer.x);
+    const cpuIsLeft = cpuPlayer.x < humanPlayer.x;
+    const attackRange = 65; // Close enough to hit
+    const specialRange = 120;
+
+    // Detect opponent state changes for reaction
+    if (humanPlayer.state !== this.lastOpponentState) {
+      this.reactionBuffer = prof.reactionDelay;
+      this.lastOpponentState = humanPlayer.state;
+    }
+    if (this.reactionBuffer > 0) this.reactionBuffer--;
+
+    // Combo system
+    if (this.comboTimer > 0) {
+      this.comboTimer--;
+      if (this.comboTimer <= 0) this.comboStep = 0;
+    }
+
+    // Think timer - AI makes decisions at intervals
+    this.thinkTimer--;
+    if (this.thinkTimer <= 0) {
+      this.thinkTimer = prof.thinkInterval + Math.floor(Math.random() * 8);
+      this.decideAction(cpuPlayer, humanPlayer, prof, dist, attackRange, cpuIsLeft);
+    }
+
+    // Execute current action
+    if (this.currentAction) {
+      this.actionTimer--;
+
+      switch(this.currentAction.type) {
+        case 'approach':
+          if (cpuIsLeft) input.right = true;
+          else input.left = true;
+          // Attack when in range
+          if (dist < attackRange && cpuPlayer.cooldown <= 0) {
+            if (Math.random() < prof.attackRate * 3) {
+              this.pickAttack(input, cpuPlayer, prof, dist, specialRange);
+            }
+          }
+          break;
+
+        case 'retreat':
+          if (cpuIsLeft) input.left = true;
+          else input.right = true;
+          break;
+
+        case 'attack':
+          this.pickAttack(input, cpuPlayer, prof, dist, specialRange);
+          this.currentAction = null; // One-shot
+          break;
+
+        case 'block':
+          input.block = true;
+          break;
+
+        case 'wander':
+          if (this.currentAction.dir === 'left') input.left = true;
+          else if (this.currentAction.dir === 'right') input.right = true;
+          break;
+
+        case 'idle':
+          // Do nothing, just stand
+          break;
+      }
+
+      if (this.actionTimer <= 0) this.currentAction = null;
+    }
+
+    // Reactive blocking — react to incoming attacks (overrides current action)
+    if (this.reactionBuffer <= 0) {
+      const opAttacking = humanPlayer.state === 'punch' || humanPlayer.state === 'kick' || humanPlayer.state === 'special';
+      if (opAttacking && dist < attackRange + 20 && Math.random() < prof.blockChance) {
+        input.block = true;
+        input.left = false;
+        input.right = false;
+        input.punch = false;
+        input.kick = false;
+        input.special = false;
+      }
+
+      // Punish on recovery — if opponent just finished attacking and is close
+      if ((humanPlayer.state === 'idle' && this.lastOpponentState !== 'idle' &&
+          (this.lastOpponentState === 'punch' || this.lastOpponentState === 'kick' || this.lastOpponentState === 'special')) &&
+          dist < attackRange && Math.random() < prof.punishChance && cpuPlayer.cooldown <= 0) {
+        input.block = false;
+        this.pickAttack(input, cpuPlayer, prof, dist, specialRange);
+      }
+    }
+
+    return input;
+  },
+
+  decideAction(cpuPlayer, humanPlayer, prof, dist, attackRange, cpuIsLeft) {
+    const rand = Math.random();
+
+    // Wander randomly (more on easy)
+    if (rand < prof.wanderChance) {
+      const dirs = ['left', 'right', 'none'];
+      this.currentAction = { type: 'wander', dir: dirs[Math.floor(Math.random() * 3)] };
+      this.actionTimer = 20 + Math.floor(Math.random() * 30);
+      return;
+    }
+
+    // If opponent is attacking, consider blocking
+    const opAttacking = humanPlayer.state === 'punch' || humanPlayer.state === 'kick' || humanPlayer.state === 'special';
+    if (opAttacking && dist < attackRange + 30 && Math.random() < prof.blockChance * 2) {
+      this.currentAction = { type: 'block' };
+      this.actionTimer = 15 + Math.floor(Math.random() * 10);
+      return;
+    }
+
+    // Optimal range seeking (medium/hard)
+    if (prof.optimalRange) {
+      const optDist = 55; // Sweet spot for attacks
+      if (dist > optDist + 30) {
+        this.currentAction = { type: 'approach' };
+        this.actionTimer = 20 + Math.floor(Math.random() * 15);
+        return;
+      }
+      if (dist < 35 && Math.random() < prof.retreatChance * 2) {
+        this.currentAction = { type: 'retreat' };
+        this.actionTimer = 10 + Math.floor(Math.random() * 10);
+        return;
+      }
+    }
+
+    // In attack range
+    if (dist < attackRange) {
+      if (Math.random() < prof.attackRate * 10) {
+        this.currentAction = { type: 'attack' };
+        this.actionTimer = 5;
+        return;
+      }
+      if (Math.random() < prof.retreatChance) {
+        this.currentAction = { type: 'retreat' };
+        this.actionTimer = 15 + Math.floor(Math.random() * 15);
+        return;
+      }
+      // Idle/feint
+      this.currentAction = { type: 'idle' };
+      this.actionTimer = 10 + Math.floor(Math.random() * 15);
+    } else {
+      // Out of range - approach
+      if (Math.random() < 0.7) {
+        this.currentAction = { type: 'approach' };
+        this.actionTimer = 15 + Math.floor(Math.random() * 20);
+      } else {
+        this.currentAction = { type: 'idle' };
+        this.actionTimer = 10 + Math.floor(Math.random() * 20);
+      }
+    }
+  },
+
+  pickAttack(input, cpuPlayer, prof, dist, specialRange) {
+    if (cpuPlayer.cooldown > 0) return;
+
+    // Combo system for medium/hard
+    if (prof.comboChance > 0 && this.comboStep > 0 && this.comboTimer > 0) {
+      // Continue combo
+      if (this.comboStep === 1) {
+        input.kick = true;
+        this.comboStep = 2;
+        this.comboTimer = 20;
+      } else if (this.comboStep === 2 && cpuPlayer.specialCooldown <= 0) {
+        input.special = true;
+        this.comboStep = 0;
+        this.comboTimer = 0;
+      } else {
+        input.punch = true;
+        this.comboStep = 0;
+      }
+      return;
+    }
+
+    // Start a combo?
+    if (Math.random() < prof.comboChance && dist < 65) {
+      input.punch = true;
+      this.comboStep = 1;
+      this.comboTimer = 25;
+      return;
+    }
+
+    // Special attack when available and in range
+    if (cpuPlayer.specialCooldown <= 0 && Math.random() < prof.specialRate * 15 && dist < specialRange) {
+      input.special = true;
+      return;
+    }
+
+    // Random punch or kick
+    if (Math.random() < 0.55) {
+      input.punch = true;
+    } else {
+      input.kick = true;
+    }
+  }
+};
+
+// ============================================================
 // TITLE SCREEN
 // ============================================================
 
 function updateTitle() {
   titleBlink++;
-  if (keys['Enter'] || keys['Space']) {
+  const gp0 = getGamepadInput(0);
+  const gp1 = getGamepadInput(1);
+
+  if (keys['Enter'] || keys['Space'] || (gp0 && gp0.confirm) || (gp1 && gp1.confirm)) {
     gameState = 'charSelect';
     players[0].confirmed = false;
     players[1].confirmed = false;
@@ -746,11 +1057,9 @@ function updateTitle() {
 }
 
 function drawTitle() {
-  // BG
   ctx.fillStyle = '#0a0a1a';
   ctx.fillRect(0, 0, W, H);
 
-  // Animated fire background
   for (let i = 0; i < 30; i++) {
     const x = (i * 37 + frameCount * 0.5) % W;
     const y = H - Math.abs(Math.sin(frameCount * 0.02 + i) * 80) - 20;
@@ -759,7 +1068,6 @@ function drawTitle() {
     ctx.fillRect(x, y, s, s);
   }
 
-  // Title with shadow
   ctx.font = 'bold 28px monospace';
   ctx.fillStyle = '#000';
   ctx.textAlign = 'center';
@@ -773,12 +1081,10 @@ function drawTitle() {
   ctx.fillStyle = '#ffcc00';
   ctx.fillText('STREET FIGHTER', W/2, 120);
 
-  // Subtitle
   ctx.font = '12px monospace';
   ctx.fillStyle = '#888';
   ctx.fillText('(Any resemblance to existing fighting games is purely coincidental)', W/2, 145);
 
-  // Blinking text
   if (titleBlink % 60 < 40) {
     ctx.font = '16px monospace';
     ctx.fillStyle = '#fff';
@@ -788,16 +1094,33 @@ function drawTitle() {
   // Controls info
   ctx.font = '10px monospace';
   ctx.fillStyle = '#666';
-  ctx.fillText('P1: WASD + F(Punch) G(Kick) R(Special) T(Block)', W/2, 280);
-  ctx.fillText('P2: Arrows + K(Punch) L(Kick) O(Special) P(Block)', W/2, 296);
+  ctx.fillText('P1: WASD + F(Punch) G(Kick) R(Special) T(Block)', W/2, 270);
+  ctx.fillText('P2: Arrows + K(Punch) L(Kick) O(Special) P(Block)', W/2, 286);
+  ctx.fillText('🎮 Gamepad: D-Pad/Stick, A=Punch, X=Kick, B=Special, LB/RB=Block', W/2, 302);
 
-  // Copyright joke
+  // Gamepad status
+  drawGamepadStatus(W/2, 325);
+
   ctx.font = '8px monospace';
   ctx.fillStyle = '#444';
-  ctx.fillText('© 2026 TOTALLY ORIGINAL GAMES INC.', W/2, 370);
-  ctx.fillText('NOT AFFILIATED WITH CAPCOM IN ANY WAY WHATSOEVER', W/2, 380);
+  ctx.fillText('© 2026 TOTALLY ORIGINAL GAMES INC.', W/2, 362);
+  ctx.fillText('NOT AFFILIATED WITH CAPCOM IN ANY WAY WHATSOEVER', W/2, 374);
 
   ctx.textAlign = 'left';
+}
+
+function drawGamepadStatus(x, y) {
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < 2; i++) {
+    const connected = connectedGamepads[i];
+    const label = `🎮 P${i+1}: `;
+    const status = connected ? 'CONNECTED' : 'NOT CONNECTED';
+    const color = connected ? '#00cc44' : '#555';
+    ctx.fillStyle = color;
+    const offset = i === 0 ? -80 : 80;
+    ctx.fillText(label + status, x + offset, y);
+  }
 }
 
 // ============================================================
@@ -807,44 +1130,57 @@ function drawTitle() {
 let charSelectCooldown = [0, 0];
 
 function updateCharSelect() {
-  // P1 selection (WASD)
+  const gp0 = getGamepadInput(0);
+  const gp1 = getGamepadInput(1);
+
+  // P1 selection (WASD + Gamepad 0)
   if (!players[0].confirmed) {
     if (charSelectCooldown[0] <= 0) {
-      if (keys['KeyA'] || keys['KeyD']) {
-        const dir = keys['KeyD'] ? 1 : -1;
+      const gpLeft = gp0 && gp0.menuLeft;
+      const gpRight = gp0 && gp0.menuRight;
+      const gpUp = gp0 && gp0.menuUp;
+      const gpDown = gp0 && gp0.menuDown;
+
+      if (keys['KeyA'] || keys['KeyD'] || gpLeft || gpRight) {
+        const dir = (keys['KeyD'] || gpRight) ? 1 : -1;
         players[0].charIdx = (players[0].charIdx + dir + 4) % 4;
         charSelectCooldown[0] = 12;
         SFX.menuMove();
       }
-      if (keys['KeyW'] || keys['KeyS']) {
-        selectedStage = (selectedStage + (keys['KeyS'] ? 1 : -1) + 4) % 4;
+      if (keys['KeyW'] || keys['KeyS'] || gpUp || gpDown) {
+        selectedStage = (selectedStage + ((keys['KeyS'] || gpDown) ? 1 : -1) + 4) % 4;
         charSelectCooldown[0] = 12;
         SFX.menuMove();
       }
     }
-    if (keys['KeyF'] || keys['KeyG']) {
+    if (keys['KeyF'] || keys['KeyG'] || (gp0 && gp0.confirm)) {
       players[0].confirmed = true;
       SFX.select();
       keys['KeyF'] = false; keys['KeyG'] = false;
     }
   }
 
-  // P2 selection (Arrows)
+  // P2 selection (Arrows + Gamepad 1)
   if (!players[1].confirmed) {
     if (charSelectCooldown[1] <= 0) {
-      if (keys['ArrowLeft'] || keys['ArrowRight']) {
-        const dir = keys['ArrowRight'] ? 1 : -1;
+      const gpLeft = gp1 && gp1.menuLeft;
+      const gpRight = gp1 && gp1.menuRight;
+      const gpUp = gp1 && gp1.menuUp;
+      const gpDown = gp1 && gp1.menuDown;
+
+      if (keys['ArrowLeft'] || keys['ArrowRight'] || gpLeft || gpRight) {
+        const dir = (keys['ArrowRight'] || gpRight) ? 1 : -1;
         players[1].charIdx = (players[1].charIdx + dir + 4) % 4;
         charSelectCooldown[1] = 12;
         SFX.menuMove();
       }
-      if (keys['ArrowUp'] || keys['ArrowDown']) {
-        selectedStage = (selectedStage + (keys['ArrowDown'] ? 1 : -1) + 4) % 4;
+      if (keys['ArrowUp'] || keys['ArrowDown'] || gpUp || gpDown) {
+        selectedStage = (selectedStage + ((keys['ArrowDown'] || gpDown) ? 1 : -1) + 4) % 4;
         charSelectCooldown[1] = 12;
         SFX.menuMove();
       }
     }
-    if (keys['KeyK'] || keys['KeyL']) {
+    if (keys['KeyK'] || keys['KeyL'] || (gp1 && gp1.confirm)) {
       players[1].confirmed = true;
       SFX.select();
       keys['KeyK'] = false; keys['KeyL'] = false;
@@ -854,9 +1190,13 @@ function updateCharSelect() {
   charSelectCooldown[0] = Math.max(0, charSelectCooldown[0] - 1);
   charSelectCooldown[1] = Math.max(0, charSelectCooldown[1] - 1);
 
-  // Both confirmed - start fight
+  // Both confirmed - go to mode select
   if (players[0].confirmed && players[1].confirmed) {
-    startFight();
+    gameState = 'modeSelect';
+    modeSelectIdx = 0;
+    diffSelectIdx = 1;
+    modeSelectPhase = 0;
+    modeSelectCooldown = 15;
   }
 }
 
@@ -864,19 +1204,16 @@ function drawCharSelect() {
   ctx.fillStyle = '#0a0a2a';
   ctx.fillRect(0, 0, W, H);
 
-  // Title
   ctx.font = 'bold 20px monospace';
   ctx.fillStyle = '#ff4444';
   ctx.textAlign = 'center';
   ctx.fillText('SELECT YOUR FIGHTER', W/2, 30);
 
-  // Character portraits
   CHARACTERS.forEach((ch, i) => {
     const x = 30 + i * 120;
     const y = 50;
     const w = 100, h = 120;
 
-    // Border
     let borderColor = '#444';
     if (players[0].charIdx === i && !players[0].confirmed) borderColor = '#4444ff';
     if (players[1].charIdx === i && !players[1].confirmed) borderColor = '#ff4444';
@@ -888,15 +1225,12 @@ function drawCharSelect() {
     ctx.lineWidth = 3;
     ctx.strokeRect(x, y, w, h);
 
-    // BG
     ctx.fillStyle = '#1a1a3a';
     ctx.fillRect(x+1, y+1, w-2, h-2);
 
-    // Draw character sprite
     const sprite = drawCharSprite(ch, 'idle', frameCount, 'right');
     ctx.drawImage(sprite, x + 18, y + 20, 64, 64);
 
-    // Name
     ctx.font = 'bold 9px monospace';
     ctx.fillStyle = ch.colors.accent;
     ctx.textAlign = 'center';
@@ -906,7 +1240,6 @@ function drawCharSelect() {
     ctx.fillStyle = '#888';
     ctx.fillText(ch.subtitle, x + w/2, y + h - 8);
 
-    // P1/P2 indicators
     if (players[0].charIdx === i) {
       ctx.font = 'bold 10px monospace';
       ctx.fillStyle = '#4444ff';
@@ -919,7 +1252,6 @@ function drawCharSelect() {
     }
   });
 
-  // Stage select
   ctx.font = '12px monospace';
   ctx.fillStyle = '#aaa';
   ctx.textAlign = 'center';
@@ -928,7 +1260,6 @@ function drawCharSelect() {
   ctx.fillStyle = '#666';
   ctx.fillText('(W/S or Up/Down to change stage)', W/2, 215);
 
-  // Stats for selected chars
   for (let p = 0; p < 2; p++) {
     const ch = CHARACTERS[players[p].charIdx];
     const x = p === 0 ? 40 : 310;
@@ -949,11 +1280,239 @@ function drawCharSelect() {
     ctx.fillText(players[p].confirmed ? '✓ READY!' : `Press ${p===0?'F/G':'K/L'} to confirm`, x, y + 56);
   }
 
-  // Controls reminder
+  // Gamepad status
+  drawGamepadStatus(W/2, 340);
+
   ctx.font = '8px monospace';
   ctx.fillStyle = '#555';
   ctx.textAlign = 'center';
-  ctx.fillText('P1: A/D select, F/G confirm  |  P2: ←/→ select, K/L confirm', W/2, 370);
+  ctx.fillText('P1: A/D select, F/G confirm  |  P2: ←/→ select, K/L confirm  |  🎮 A to confirm', W/2, 370);
+
+  ctx.textAlign = 'left';
+}
+
+// ============================================================
+// MODE SELECT SCREEN
+// ============================================================
+
+function updateModeSelect() {
+  if (modeSelectCooldown > 0) { modeSelectCooldown--; return; }
+
+  const gp0 = getGamepadInput(0);
+  const gp1 = getGamepadInput(1);
+
+  const anyConfirm = keys['Enter'] || keys['Space'] || keys['KeyF'] || keys['KeyG'] || keys['KeyK'] || keys['KeyL']
+    || (gp0 && gp0.confirm) || (gp1 && gp1.confirm);
+  const anyLeft = keys['KeyA'] || keys['ArrowLeft'] || (gp0 && gp0.menuLeft) || (gp1 && gp1.menuLeft);
+  const anyRight = keys['KeyD'] || keys['ArrowRight'] || (gp0 && gp0.menuRight) || (gp1 && gp1.menuRight);
+  const anyBack = keys['Escape'] || (gp0 && gp0.back) || (gp1 && gp1.back);
+
+  if (modeSelectPhase === 0) {
+    // Selecting mode: VS PLAYER or VS CPU
+    if (anyLeft || anyRight) {
+      modeSelectIdx = modeSelectIdx === 0 ? 1 : 0;
+      modeSelectCooldown = 12;
+      SFX.menuMove();
+      // Clear keys
+      keys['KeyA'] = false; keys['KeyD'] = false;
+      keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
+    }
+
+    if (anyConfirm) {
+      SFX.select();
+      keys['Enter'] = false; keys['Space'] = false;
+      keys['KeyF'] = false; keys['KeyG'] = false;
+      keys['KeyK'] = false; keys['KeyL'] = false;
+      if (modeSelectIdx === 0) {
+        // VS PLAYER
+        gameMode = 'pvp';
+        startFight();
+      } else {
+        // VS CPU - go to difficulty select
+        modeSelectPhase = 1;
+        modeSelectCooldown = 12;
+      }
+    }
+
+    if (anyBack) {
+      // Go back to char select
+      keys['Escape'] = false;
+      gameState = 'charSelect';
+      players[0].confirmed = false;
+      players[1].confirmed = false;
+      modeSelectCooldown = 15;
+    }
+  } else {
+    // Selecting difficulty
+    if (anyLeft) {
+      diffSelectIdx = Math.max(0, diffSelectIdx - 1);
+      modeSelectCooldown = 12;
+      SFX.menuMove();
+      keys['KeyA'] = false; keys['ArrowLeft'] = false;
+    }
+    if (anyRight) {
+      diffSelectIdx = Math.min(2, diffSelectIdx + 1);
+      modeSelectCooldown = 12;
+      SFX.menuMove();
+      keys['KeyD'] = false; keys['ArrowRight'] = false;
+    }
+
+    if (anyConfirm) {
+      SFX.select();
+      keys['Enter'] = false; keys['Space'] = false;
+      keys['KeyF'] = false; keys['KeyG'] = false;
+      keys['KeyK'] = false; keys['KeyL'] = false;
+      gameMode = 'cpu';
+      cpuDifficulty = diffSelectIdx;
+      AI.reset();
+      startFight();
+    }
+
+    if (anyBack) {
+      keys['Escape'] = false;
+      modeSelectPhase = 0;
+      modeSelectCooldown = 12;
+    }
+  }
+}
+
+function drawModeSelect() {
+  ctx.fillStyle = '#0a0a2a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = '#ffcc00';
+  ctx.textAlign = 'center';
+  ctx.fillText('CHOOSE YOUR BATTLE', W/2, 50);
+
+  // Show selected characters
+  const ch1 = CHARACTERS[players[0].charIdx];
+  const ch2 = CHARACTERS[players[1].charIdx];
+  const sprite1 = drawCharSprite(ch1, 'idle', frameCount, 'right');
+  const sprite2 = drawCharSprite(ch2, 'idle', frameCount, 'left');
+  ctx.drawImage(sprite1, 60, 65, 80, 80);
+  ctx.drawImage(sprite2, W - 140, 65, 80, 80);
+
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#4444ff';
+  ctx.fillText('P1: ' + ch1.name, 100, 155);
+  ctx.fillStyle = '#ff4444';
+  ctx.fillText('P2: ' + ch2.name, W - 100, 155);
+
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#888';
+  ctx.fillText('VS', W/2, 115);
+  ctx.fillText('STAGE: ' + STAGES[selectedStage].name, W/2, 135);
+
+  if (modeSelectPhase === 0) {
+    // Mode selection
+    const modes = ['VS PLAYER', 'VS CPU'];
+    const modeDescs = ['Two human players battle it out!', 'Challenge the computer!'];
+    const modeColors = ['#44aaff', '#ff6644'];
+
+    for (let i = 0; i < 2; i++) {
+      const x = W/2 - 130 + i * 150;
+      const y = 185;
+      const bw = 120, bh = 50;
+      const selected = modeSelectIdx === i;
+
+      // Box
+      ctx.fillStyle = selected ? '#1a1a4a' : '#111122';
+      ctx.fillRect(x, y, bw, bh);
+      ctx.strokeStyle = selected ? modeColors[i] : '#333';
+      ctx.lineWidth = selected ? 3 : 1;
+      ctx.strokeRect(x, y, bw, bh);
+
+      // Pulsing selection
+      if (selected && frameCount % 40 < 20) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 2, y - 2, bw + 4, bh + 4);
+      }
+
+      // Icon
+      ctx.font = '20px monospace';
+      ctx.fillStyle = selected ? modeColors[i] : '#555';
+      ctx.fillText(i === 0 ? '👥' : '🤖', x + bw/2, y + 22);
+
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = selected ? '#fff' : '#666';
+      ctx.fillText(modes[i], x + bw/2, y + 42);
+    }
+
+    // Description
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(modeDescs[modeSelectIdx], W/2, 260);
+
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#666';
+    ctx.fillText('← → to select  |  ENTER / A to confirm  |  ESC to go back', W/2, 290);
+
+  } else {
+    // Difficulty selection
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = '#ff6644';
+    ctx.fillText('SELECT DIFFICULTY', W/2, 190);
+
+    const diffs = ['EASY', 'MEDIUM', 'HARD'];
+    const diffColors = ['#44cc44', '#ffaa00', '#ff2222'];
+    const diffDescs = [
+      'Slow reactions, random moves.\nPerfect for beginners!',
+      'Decent reactions, sometimes blocks.\nA worthy challenge!',
+      'Fast reactions, punishes mistakes!\nGood luck, you\'ll need it.'
+    ];
+    const diffIcons = ['😊', '😤', '💀'];
+
+    for (let i = 0; i < 3; i++) {
+      const x = W/2 - 195 + i * 140;
+      const y = 205;
+      const bw = 120, bh = 65;
+      const selected = diffSelectIdx === i;
+
+      ctx.fillStyle = selected ? '#1a1a3a' : '#0d0d1a';
+      ctx.fillRect(x, y, bw, bh);
+      ctx.strokeStyle = selected ? diffColors[i] : '#333';
+      ctx.lineWidth = selected ? 3 : 1;
+      ctx.strokeRect(x, y, bw, bh);
+
+      if (selected && frameCount % 40 < 20) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 2, y - 2, bw + 4, bh + 4);
+      }
+
+      ctx.font = '22px monospace';
+      ctx.fillStyle = selected ? diffColors[i] : '#555';
+      ctx.fillText(diffIcons[i], x + bw/2, y + 25);
+
+      ctx.font = 'bold 12px monospace';
+      ctx.fillStyle = selected ? '#fff' : '#666';
+      ctx.fillText(diffs[i], x + bw/2, y + 48);
+
+      // Difficulty bar
+      ctx.fillStyle = '#222';
+      ctx.fillRect(x + 15, y + 54, bw - 30, 4);
+      ctx.fillStyle = diffColors[i];
+      ctx.fillRect(x + 15, y + 54, (bw - 30) * ((i + 1) / 3), 4);
+    }
+
+    // Description text
+    const descLines = diffDescs[diffSelectIdx].split('\n');
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#aaa';
+    descLines.forEach((line, idx) => {
+      ctx.fillText(line, W/2, 292 + idx * 14);
+    });
+
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#666';
+    ctx.fillText('← → to select  |  ENTER / A to confirm  |  ESC to go back', W/2, 330);
+  }
+
+  // Gamepad status
+  drawGamepadStatus(W/2, 360);
 
   ctx.textAlign = 'left';
 }
@@ -969,6 +1528,7 @@ function startFight() {
   players[0].wins = 0;
   players[1].wins = 0;
   roundNum = 1;
+  AI.reset();
 }
 
 function resetRound() {
@@ -999,6 +1559,7 @@ function resetRound() {
   winner = -1;
   projectiles = [];
   particles = [];
+  AI.reset();
   SFX.roundAnnounce();
 }
 
@@ -1042,7 +1603,6 @@ function updateFight() {
 
   if (roundState === 'ko') {
     roundAnnounceTimer--;
-    // Update KO'd player animation
     players.forEach(p => {
       if (p.state === 'ko') p.stateTimer++;
     });
@@ -1070,23 +1630,34 @@ function updateFight() {
     roundTimerTick = 0;
     roundTimer--;
     if (roundTimer <= 0) {
-      // Time out - whoever has more HP wins
       if (players[0].hp > players[1].hp) endRound(0);
       else if (players[1].hp > players[0].hp) endRound(1);
-      else endRound(-1); // draw
+      else endRound(-1);
       return;
     }
   }
 
-  // Player input and physics
+  // Get gamepad inputs
+  const gp0 = getGamepadInput(0);
+  const gp1 = getGamepadInput(1);
+
+  // Player 1 input (keyboard + gamepad 0)
   updatePlayer(0, {
     left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS',
     punch: 'KeyF', kick: 'KeyG', special: 'KeyR', block: 'KeyT'
-  });
-  updatePlayer(1, {
-    left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown',
-    punch: 'KeyK', kick: 'KeyL', special: 'KeyO', block: 'KeyP'
-  });
+  }, gp0);
+
+  // Player 2 input (keyboard + gamepad 1, or AI)
+  if (gameMode === 'cpu') {
+    // AI controls player 2
+    const aiInput = AI.update(players[1], players[0]);
+    updatePlayerFromInput(1, aiInput);
+  } else {
+    updatePlayer(1, {
+      left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown',
+      punch: 'KeyK', kick: 'KeyL', special: 'KeyO', block: 'KeyP'
+    }, gp1);
+  }
 
   // Face each other
   if (players[0].state !== 'hit' && players[0].state !== 'ko') {
@@ -1126,15 +1697,12 @@ function updateFight() {
         else if (attacker.state === 'kick') SFX.kick();
         else SFX.special();
         screenShake = attacker.state === 'special' ? 8 : 5;
-        // Hit particles
         for (let i = 0; i < 8; i++) addParticle(atkBox.x + atkBox.w/2, atkBox.y, '#ff4444');
         for (let i = 0; i < 4; i++) addParticle(atkBox.x + atkBox.w/2, atkBox.y, '#ffcc00');
-        // Knockback
         const kb = attacker.state === 'special' ? 8 : 4;
         defender.x += (attacker.facing === 'right' ? kb : -kb);
       }
 
-      // KO check
       if (defender.hp <= 0) {
         defender.state = 'ko';
         defender.stateTimer = 0;
@@ -1148,7 +1716,6 @@ function updateFight() {
   projectiles.forEach(p => {
     p.x += p.vx;
     p.life--;
-    // Check hit
     const target = players[1 - p.owner];
     const hb = getHurtBox(target);
     if (boxOverlap({x: p.x, y: p.y, w: 8, h: 8}, hb) && target.state !== 'ko') {
@@ -1177,19 +1744,18 @@ function updateFight() {
 
   updateParticles();
 
-  // Screen shake decay
   if (screenShake > 0) screenShake *= 0.85;
   if (screenShake < 0.5) screenShake = 0;
 }
 
-function updatePlayer(idx, controls) {
+// Update player with keyboard controls + optional gamepad input
+function updatePlayer(idx, controls, gpInput) {
   const p = players[idx];
   const ch = CHARACTERS[p.charIdx];
 
   if (p.cooldown > 0) p.cooldown--;
   if (p.specialCooldown > 0) p.specialCooldown--;
 
-  // Hitstun
   if (p.hitstun > 0) {
     p.hitstun--;
     p.stateTimer++;
@@ -1200,17 +1766,17 @@ function updatePlayer(idx, controls) {
     return;
   }
 
-  // Blockstun
   if (p.blockstun > 0) {
     p.blockstun--;
-    if (p.blockstun <= 0 && p.state === 'block' && !keys[controls.block]) {
+    const kbBlock = keys[controls.block];
+    const gpBlock = gpInput && gpInput.block;
+    if (p.blockstun <= 0 && p.state === 'block' && !kbBlock && !gpBlock) {
       p.state = 'idle';
       p.stateTimer = 0;
     }
     return;
   }
 
-  // Attack states
   if (p.state === 'punch' || p.state === 'kick' || p.state === 'special') {
     p.stateTimer++;
     const dur = p.state === 'special' ? 20 : 12;
@@ -1222,8 +1788,10 @@ function updatePlayer(idx, controls) {
     return;
   }
 
-  // Block
-  if (keys[controls.block]) {
+  // Block (keyboard OR gamepad)
+  const kbBlock = keys[controls.block];
+  const gpBlock = gpInput && gpInput.block;
+  if (kbBlock || gpBlock) {
     p.state = 'block';
     p.stateTimer++;
     return;
@@ -1232,21 +1800,15 @@ function updatePlayer(idx, controls) {
     p.stateTimer = 0;
   }
 
-  // Movement
+  // Movement (keyboard OR gamepad)
   let moving = false;
-  if (keys[controls.left]) {
-    p.x -= ch.speed;
-    moving = true;
-  }
-  if (keys[controls.right]) {
-    p.x += ch.speed;
-    moving = true;
-  }
+  const goLeft = keys[controls.left] || (gpInput && gpInput.left);
+  const goRight = keys[controls.right] || (gpInput && gpInput.right);
+  if (goLeft) { p.x -= ch.speed; moving = true; }
+  if (goRight) { p.x += ch.speed; moving = true; }
 
-  // Clamp position
   p.x = Math.max(FIGHT_LEFT, Math.min(FIGHT_RIGHT, p.x));
 
-  // Push apart if overlapping
   const other = players[1 - idx];
   const dist = Math.abs(p.x - other.x);
   if (dist < 40) {
@@ -1255,22 +1817,26 @@ function updatePlayer(idx, controls) {
     p.x = Math.max(FIGHT_LEFT, Math.min(FIGHT_RIGHT, p.x));
   }
 
-  // Attacks
-  if (keys[controls.punch] && p.cooldown <= 0) {
+  // Attacks (keyboard with key-consume, OR gamepad justPressed)
+  const gpPunch = gpInput && gpInput.punch;
+  const gpKick = gpInput && gpInput.kick;
+  const gpSpecial = gpInput && gpInput.special;
+
+  if ((keys[controls.punch] || gpPunch) && p.cooldown <= 0) {
     p.state = 'punch';
     p.stateTimer = 0;
     p.cooldown = 15;
     keys[controls.punch] = false;
     return;
   }
-  if (keys[controls.kick] && p.cooldown <= 0) {
+  if ((keys[controls.kick] || gpKick) && p.cooldown <= 0) {
     p.state = 'kick';
     p.stateTimer = 0;
     p.cooldown = 15;
     keys[controls.kick] = false;
     return;
   }
-  if (keys[controls.special] && p.cooldown <= 0 && p.specialCooldown <= 0) {
+  if ((keys[controls.special] || gpSpecial) && p.cooldown <= 0 && p.specialCooldown <= 0) {
     p.state = 'special';
     p.stateTimer = 0;
     p.cooldown = 20;
@@ -1279,7 +1845,96 @@ function updatePlayer(idx, controls) {
     return;
   }
 
-  // Walking/idle
+  if (moving) {
+    if (p.state !== 'walk') { p.state = 'walk'; p.stateTimer = 0; }
+    p.stateTimer++;
+  } else {
+    if (p.state === 'walk') { p.state = 'idle'; p.stateTimer = 0; }
+    p.stateTimer++;
+  }
+}
+
+// Update player from a virtual input object (used by AI)
+function updatePlayerFromInput(idx, input) {
+  const p = players[idx];
+  const ch = CHARACTERS[p.charIdx];
+
+  if (p.cooldown > 0) p.cooldown--;
+  if (p.specialCooldown > 0) p.specialCooldown--;
+
+  if (p.hitstun > 0) {
+    p.hitstun--;
+    p.stateTimer++;
+    if (p.hitstun <= 0) {
+      p.state = 'idle';
+      p.stateTimer = 0;
+    }
+    return;
+  }
+
+  if (p.blockstun > 0) {
+    p.blockstun--;
+    if (p.blockstun <= 0 && p.state === 'block' && !input.block) {
+      p.state = 'idle';
+      p.stateTimer = 0;
+    }
+    return;
+  }
+
+  if (p.state === 'punch' || p.state === 'kick' || p.state === 'special') {
+    p.stateTimer++;
+    const dur = p.state === 'special' ? 20 : 12;
+    if (p.stateTimer >= dur) {
+      p.state = 'idle';
+      p.stateTimer = 0;
+      p.cooldown = 8;
+    }
+    return;
+  }
+
+  if (input.block) {
+    p.state = 'block';
+    p.stateTimer++;
+    return;
+  } else if (p.state === 'block') {
+    p.state = 'idle';
+    p.stateTimer = 0;
+  }
+
+  let moving = false;
+  if (input.left) { p.x -= ch.speed; moving = true; }
+  if (input.right) { p.x += ch.speed; moving = true; }
+
+  p.x = Math.max(FIGHT_LEFT, Math.min(FIGHT_RIGHT, p.x));
+
+  const other = players[1 - idx];
+  const dist = Math.abs(p.x - other.x);
+  if (dist < 40) {
+    if (p.x < other.x) p.x = other.x - 40;
+    else p.x = other.x + 40;
+    p.x = Math.max(FIGHT_LEFT, Math.min(FIGHT_RIGHT, p.x));
+  }
+
+  if (input.punch && p.cooldown <= 0) {
+    p.state = 'punch';
+    p.stateTimer = 0;
+    p.cooldown = 15;
+    return;
+  }
+  if (input.kick && p.cooldown <= 0) {
+    p.state = 'kick';
+    p.stateTimer = 0;
+    p.cooldown = 15;
+    return;
+  }
+  if (input.special && p.cooldown <= 0 && p.specialCooldown <= 0) {
+    p.state = 'special';
+    p.stateTimer = 0;
+    p.cooldown = 20;
+    p.specialCooldown = 90;
+    return;
+  }
+
   if (moving) {
     if (p.state !== 'walk') { p.state = 'walk'; p.stateTimer = 0; }
     p.stateTimer++;
@@ -1297,7 +1952,6 @@ function endRound(winnerIdx) {
   SFX.ko();
   flashTimer = 15;
   screenShake = 12;
-  // KO particles
   const loser = players[1 - winnerIdx];
   if (loser) {
     for (let i = 0; i < 20; i++) {
@@ -1317,7 +1971,6 @@ function updateParticles() {
 }
 
 function drawFight() {
-  // Apply screen shake
   ctx.save();
   if (screenShake > 0) {
     ctx.translate(
@@ -1326,10 +1979,8 @@ function drawFight() {
     );
   }
 
-  // Draw stage
   STAGES[selectedStage].draw(ctx, W, H, frameCount);
 
-  // Flash effect
   if (flashTimer > 0) {
     ctx.globalAlpha = flashTimer / 15 * 0.5;
     ctx.fillStyle = '#fff';
@@ -1338,14 +1989,12 @@ function drawFight() {
     flashTimer--;
   }
 
-  // Draw players
   for (let i = 0; i < 2; i++) {
     const p = players[i];
     const ch = CHARACTERS[p.charIdx];
     const sprite = drawCharSprite(ch, p.state, p.stateTimer, p.facing);
     ctx.drawImage(sprite, p.x, GROUND_Y, 64, 64);
 
-    // Shadow
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = '#000';
     ctx.beginPath();
@@ -1354,7 +2003,6 @@ function drawFight() {
     ctx.globalAlpha = 1;
   }
 
-  // Draw projectiles
   projectiles.forEach(p => {
     ctx.fillStyle = CHARACTERS[players[p.owner].charIdx].colors.accent;
     ctx.beginPath();
@@ -1366,7 +2014,6 @@ function drawFight() {
     ctx.fill();
   });
 
-  // Draw particles
   particles.forEach(p => {
     ctx.globalAlpha = p.life / p.maxLife;
     ctx.fillStyle = p.color;
@@ -1376,10 +2023,8 @@ function drawFight() {
 
   ctx.restore();
 
-  // HUD (not affected by shake)
   drawHUD();
 
-  // Round announce overlay
   if (roundState === 'announce') {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, H/2 - 40, W, 80);
@@ -1397,7 +2042,6 @@ function drawFight() {
     ctx.textAlign = 'left';
   }
 
-  // KO overlay
   if (roundState === 'ko') {
     ctx.font = 'bold 48px monospace';
     ctx.textAlign = 'center';
@@ -1416,39 +2060,34 @@ function drawFight() {
 }
 
 function drawHUD() {
-  // Health bars background
   ctx.fillStyle = '#111';
   ctx.fillRect(10, 10, 200, 20);
   ctx.fillRect(W - 210, 10, 200, 20);
 
-  // Health bars
   const hp1w = (players[0].hp / players[0].maxHp) * 196;
   const hp2w = (players[1].hp / players[1].maxHp) * 196;
 
-  // P1 health (fills from left)
   const hp1color = players[0].hp > 50 ? '#00cc44' : (players[0].hp > 25 ? '#cccc00' : '#cc0000');
   ctx.fillStyle = hp1color;
   ctx.fillRect(12, 12, hp1w, 16);
 
-  // P2 health (fills from right)
   const hp2color = players[1].hp > 50 ? '#00cc44' : (players[1].hp > 25 ? '#cccc00' : '#cc0000');
   ctx.fillStyle = hp2color;
   ctx.fillRect(W - 12 - hp2w, 12, hp2w, 16);
 
-  // Health bar borders
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
   ctx.strokeRect(10, 10, 200, 20);
   ctx.strokeRect(W - 210, 10, 200, 20);
 
-  // Player names
   ctx.font = 'bold 10px monospace';
   ctx.fillStyle = '#4444ff';
   ctx.textAlign = 'left';
   ctx.fillText('P1 ' + CHARACTERS[players[0].charIdx].name, 12, 44);
   ctx.fillStyle = '#ff4444';
   ctx.textAlign = 'right';
-  ctx.fillText(CHARACTERS[players[1].charIdx].name + ' P2', W - 12, 44);
+  const p2Label = gameMode === 'cpu' ? 'CPU' : 'P2';
+  ctx.fillText(CHARACTERS[players[1].charIdx].name + ' ' + p2Label, W - 12, 44);
 
   // Timer
   ctx.font = 'bold 24px monospace';
@@ -1456,7 +2095,7 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(roundTimer.toString().padStart(2, '0'), W/2, 28);
 
-  // Round indicators (wins)
+  // Round indicators
   for (let i = 0; i < 2; i++) {
     for (let w = 0; w < 2; w++) {
       const x = i === 0 ? 220 + w * 16 : W - 236 - w * 16;
@@ -1470,12 +2109,20 @@ function drawHUD() {
     }
   }
 
-  // Round number
   ctx.font = '10px monospace';
   ctx.fillStyle = '#888';
   ctx.fillText(`ROUND ${roundNum}`, W/2, 44);
 
-  // Special cooldown indicator
+  // Game mode indicator
+  if (gameMode === 'cpu') {
+    const diffNames = ['EASY', 'MEDIUM', 'HARD'];
+    const diffColors = ['#44cc44', '#ffaa00', '#ff2222'];
+    ctx.font = '8px monospace';
+    ctx.fillStyle = diffColors[cpuDifficulty];
+    ctx.fillText(`VS CPU: ${diffNames[cpuDifficulty]}`, W/2, 54);
+  }
+
+  // Special cooldown
   for (let i = 0; i < 2; i++) {
     const x = i === 0 ? 12 : W - 80;
     const cd = players[i].specialCooldown;
@@ -1501,7 +2148,6 @@ function drawMatchEnd() {
   ctx.fillStyle = '#0a0a1a';
   ctx.fillRect(0, 0, W, H);
 
-  // Winner spotlight
   const ch = CHARACTERS[players[matchWinner].charIdx];
   const grd = ctx.createRadialGradient(W/2, H/2, 10, W/2, H/2, 200);
   grd.addColorStop(0, ch.colors.accent + '44');
@@ -1509,7 +2155,6 @@ function drawMatchEnd() {
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, W, H);
 
-  // Winner text
   ctx.font = 'bold 28px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffcc00';
@@ -1519,22 +2164,27 @@ function drawMatchEnd() {
   ctx.fillStyle = '#fff';
   ctx.fillText('WINS!', W/2, 90);
 
-  // Draw winner sprite big
   const sprite = drawCharSprite(ch, 'idle', frameCount, 'right');
   ctx.drawImage(sprite, W/2 - 64, 100, 128, 128);
 
-  // Score
   ctx.font = '14px monospace';
   ctx.fillStyle = '#aaa';
   ctx.fillText(`${players[0].wins} - ${players[1].wins}`, W/2, 250);
 
-  // Winner quote
+  // Show mode info
+  if (gameMode === 'cpu') {
+    const diffNames = ['EASY', 'MEDIUM', 'HARD'];
+    const winnerLabel = matchWinner === 0 ? 'PLAYER' : 'CPU';
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#888';
+    ctx.fillText(`VS CPU (${diffNames[cpuDifficulty]}) — ${winnerLabel} WINS`, W/2, 264);
+  }
+
   const quote = ch.quotes[Math.floor(frameCount / 300) % ch.quotes.length];
   ctx.font = '11px monospace';
   ctx.fillStyle = '#ffcc00';
-  ctx.fillText(quote, W/2, 280);
+  ctx.fillText(quote, W/2, 285);
 
-  // Prompt
   if (frameCount % 60 < 40) {
     ctx.font = '14px monospace';
     ctx.fillStyle = '#fff';
@@ -1546,12 +2196,14 @@ function drawMatchEnd() {
 
   ctx.textAlign = 'left';
 
-  // Input
-  if (keys['Enter']) {
+  const gp0 = getGamepadInput(0);
+  const gp1 = getGamepadInput(1);
+
+  if (keys['Enter'] || (gp0 && gp0.confirm) || (gp1 && gp1.confirm)) {
     keys['Enter'] = false;
     startFight();
   }
-  if (keys['Escape']) {
+  if (keys['Escape'] || (gp0 && gp0.back) || (gp1 && gp1.back)) {
     keys['Escape'] = false;
     gameState = 'charSelect';
     players[0].confirmed = false;
@@ -1566,12 +2218,14 @@ function drawMatchEnd() {
 
 function update() {
   frameCount++;
+  pollGamepads();
 
   switch(gameState) {
     case 'title': updateTitle(); break;
     case 'charSelect': updateCharSelect(); break;
+    case 'modeSelect': updateModeSelect(); break;
     case 'fight': updateFight(); break;
-    case 'matchEnd': break; // handled in draw
+    case 'matchEnd': break;
   }
 }
 
@@ -1581,11 +2235,12 @@ function draw() {
   switch(gameState) {
     case 'title': drawTitle(); break;
     case 'charSelect': drawCharSelect(); break;
+    case 'modeSelect': drawModeSelect(); break;
     case 'fight': drawFight(); break;
     case 'matchEnd': drawMatchEnd(); break;
   }
 
-  // Scanline effect (subtle)
+  // Scanline effect
   ctx.globalAlpha = 0.03;
   for (let y = 0; y < H; y += 2) {
     ctx.fillStyle = '#000';
