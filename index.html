@@ -1717,23 +1717,17 @@ drawTitle=function(){
   }
 };
 
-// Auto-fullscreen on landscape + first touch
+// Auto-fullscreen on landscape + first touch (same method as GTA game)
 if(isTouchDevice){
   function tryFS(){
-    if(!document.fullscreenElement){
-      const el=document.documentElement;
-      if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
-      else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
-    }
+    const d=document.documentElement;
+    const rfs=d.requestFullscreen||d.webkitRequestFullscreen||d.mozRequestFullScreen||d.msRequestFullscreen;
+    if(rfs)try{rfs.call(d)}catch(e){}
   }
-  // Fullscreen on first touch (user gesture required by browsers)
-  let fsDone=false;
-  document.addEventListener('touchstart',function fsTouch(){
-    if(!fsDone){tryFS();fsDone=true;}
-  },{once:false,passive:true});
-  // Also try on orientation change (direct, no setTimeout to keep user gesture context)
-  if(screen.orientation)screen.orientation.addEventListener('change',tryFS);
-  window.addEventListener('orientationchange',tryFS);
+  let fsRequested=false;
+  document.addEventListener('touchstart',function(){if(!fsRequested){fsRequested=true;tryFS()}},{once:false,passive:true});
+  window.addEventListener('orientationchange',()=>{const o=screen.orientation?screen.orientation.angle:(window.orientation||0);if(Math.abs(o)===90||Math.abs(o)===270||Math.abs(o)===-90)tryFS()});
+  if(screen.orientation)screen.orientation.addEventListener('change',()=>{if(screen.orientation.type.includes('landscape'))tryFS()});
 }
 // Fullscreen button removed — auto-fullscreen on landscape + TAP TO START handles it
 loop();
