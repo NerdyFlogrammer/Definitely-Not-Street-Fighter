@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
 <title>Definitely Not Street Fighter II - Arcade Edition</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -1704,6 +1708,15 @@ drawTitle=function(){
   }
 };
 
+// Fullscreen on first touch (mobile)
+if(isTouchDevice){
+  document.addEventListener('touchstart',function goFS(){
+    const el=document.documentElement;
+    if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
+    else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+    document.removeEventListener('touchstart',goFS);
+  },{once:true});
+}
 loop();
 </script>
 </body>
