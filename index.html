@@ -1502,13 +1502,15 @@ updateCharSelect=function(){
       const kL=keys['ArrowLeft'];const kR=keys['ArrowRight'];
       const kU=keys['ArrowUp'];const kD=keys['ArrowDown'];
       const gp=g1;
+      // On touch device with no P2 input: auto-confirm P2 after P1 confirms
+      if(isTouchDevice&&P[0].conf&&!gp){P[p].conf=true;SFX.select();continue}
       if(kL||kR||(gp&&gp.mL)||(gp&&gp.mR)){P[p].ci=(P[p].ci+((kR||(gp&&gp.mR))?1:-1)+4)%4;csCd[p]=10;SFX.menuMove()}
       if(kU||kD||(gp&&gp.mU)||(gp&&gp.mD)){selStage=(selStage+((kD||(gp&&gp.mD))?1:-1)+4)%4;csCd[p]=10;SFX.menuMove()}
       const conf=ck('Digit1')||ck('Digit2')||ck('Numpad1')||ck('Numpad2')||ck('KeyK');
       if(conf||(gp&&gp.confirm)){P[p].conf=true;SFX.select()}
     }
   }
-  if(P[0].conf&&P[1].conf){gs='modeSelect';msIdx=0;dsIdx=1;msPh=0;msCd=12}
+  if(P[0].conf&&P[1].conf){gs='modeSelect';msIdx=isTouchDevice?1:0;dsIdx=1;msPh=0;msCd=12}
 };
 
 // Patch mode select to accept touch
